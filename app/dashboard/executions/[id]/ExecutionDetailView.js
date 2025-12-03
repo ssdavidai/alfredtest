@@ -294,7 +294,7 @@ export default function ExecutionDetailView({ executionId }) {
             <pre className="bg-base-200 p-4 rounded-lg text-sm overflow-x-auto">
               {typeof execution.input === "string"
                 ? execution.input
-                : JSON.stringify(execution.input, null, 2)}
+                : JSON.stringify(execution.output, null, 2)}
             </pre>
           </div>
         </div>
@@ -308,7 +308,7 @@ export default function ExecutionDetailView({ executionId }) {
             <pre className="bg-base-200 p-4 rounded-lg text-sm overflow-x-auto">
               {typeof execution.output === "string"
                 ? execution.output
-                : JSON.stringify(execution.input, null, 2)}
+                : JSON.stringify(execution.output, null, 2)}
             </pre>
           </div>
         </div>

@@ -26,8 +26,12 @@ export async function POST() {
     const randomBytes = crypto.randomBytes(16).toString("hex");
     const apiKey = `alf_${randomBytes}`;
 
-    // Update user with new API key
-    user.apiKey = apiKey;
+    // Hash the API key for secure storage
+    const apiKeyHash = crypto.createHash("sha256").update(apiKey).digest("hex");
+
+    // Update user with hashed API key
+    user.apiKeyHash = apiKeyHash;
+    user.apiKey = undefined; // Remove plain text API key if it exists
     user.apiKeyCreatedAt = new Date();
     await user.save();
 
@@ -61,7 +65,7 @@ export async function DELETE() {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    if (!user.apiKey) {
+    if (!user.apiKeyHash) {
       return NextResponse.json(
         { error: "No API key to revoke" },
         { status: 400 }
@@ -69,7 +73,8 @@ export async function DELETE() {
     }
 
     // Revoke API key by removing it
-    user.apiKey = undefined;
+    user.apiKeyHash = undefined;
+    user.apiKey = undefined; // Also remove if it exists
     user.apiKeyCreatedAt = undefined;
     await user.save();
 
