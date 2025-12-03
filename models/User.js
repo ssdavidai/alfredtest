@@ -36,7 +36,7 @@ const userSchema = mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    // VM Provisioning Fields
+    // VM provisioning fields
     vmSubdomain: {
       type: String,
       trim: true,
