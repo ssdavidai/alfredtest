@@ -36,6 +36,15 @@ const userSchema = mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // API key for programmatic access
+    apiKey: {
+      type: String,
+      private: true,
+    },
+    // Timestamp when the API key was created
+    apiKeyCreatedAt: {
+      type: Date,
+    },
   },
   {
     timestamps: true,
