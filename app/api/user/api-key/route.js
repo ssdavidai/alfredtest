@@ -5,7 +5,7 @@ import User from "@/models/User";
 import crypto from "crypto";
 
 // POST: Generate new API key
-export async function POST(req) {
+export async function POST() {
   const session = await auth();
 
   if (!session) {
@@ -44,7 +44,7 @@ export async function POST(req) {
 }
 
 // DELETE: Revoke API key
-export async function DELETE(req) {
+export async function DELETE() {
   const session = await auth();
 
   if (!session) {
@@ -83,7 +83,7 @@ export async function DELETE(req) {
 }
 
 // GET: Check if user has an API key (without revealing the key)
-export async function GET(req) {
+export async function GET() {
   const session = await auth();
 
   if (!session) {

@@ -4,7 +4,7 @@ import { useState } from "react";
 import toast from "react-hot-toast";
 import apiClient from "@/libs/api";
 
-const Quickstart = ({ subdomain, apiKey, vmStatus, onApiKeyGenerated }) => {
+const Quickstart = ({ subdomain, apiKey, onApiKeyGenerated }) => {
   const [isGenerating, setIsGenerating] = useState(false);
 
   const mcpUrl = subdomain ? `mcp://${subdomain}.alfredos.site` : "";
@@ -168,7 +168,7 @@ const Quickstart = ({ subdomain, apiKey, vmStatus, onApiKeyGenerated }) => {
             {apiKey && (
               <label className="label">
                 <span className="label-text-alt text-warning">
-                  Keep your API key secure. It won't be shown in full again after you leave this page.
+                  Keep your API key secure. It won&apos;t be shown in full again after you leave this page.
                 </span>
               </label>
             )}

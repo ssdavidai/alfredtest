@@ -4,7 +4,7 @@ import connectMongo from "@/libs/mongoose";
 import User from "@/models/User";
 
 // GET: Fetch user status (subscription, VM status, subdomain, API key info)
-export async function GET(req) {
+export async function GET() {
   const session = await auth();
 
   if (!session) {

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import apiClient from "@/libs/api";
 import ButtonAccount from "@/components/ButtonAccount";
 
 export default function ConnectionsPage() {

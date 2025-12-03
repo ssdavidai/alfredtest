@@ -22,6 +22,7 @@ export default function ExecutionsPage() {
 
   useEffect(() => {
     fetchExecutions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, statusFilter]);
 
   const fetchExecutions = async () => {
