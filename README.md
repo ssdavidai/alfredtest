@@ -1,37 +1,35 @@
-# ShipFast — Javascript
+# Alfred - Your AI Butler
 
-Hey maker 👋 it's Marc from [ShipFast](https://shipfa.st/docs). Let's get your startup off the ground, FAST ⚡️
+Alfred is a zero-config AI automation platform with dedicated infrastructure. Let Alfred handle your repetitive tasks while you focus on what matters.
 
-<sub>**Watch/Star the repo to be notified when updates are pushed**</sub>
+## Features
+
+- **Zero-Config**: Get started in minutes, not hours. Alfred handles all the complex setup for you.
+- **Data Sovereignty**: Your credentials stay on your infrastructure. Full control, complete privacy.
+- **Extensible**: Build custom skills and integrations. Alfred grows with your needs.
+- **Self-Teaching**: Alfred learns from your patterns and improves over time.
+
+## Tech Stack
+
+- **Framework**: Next.js 15 with App Router
+- **Frontend**: React 19, Tailwind CSS, DaisyUI
+- **Authentication**: NextAuth v5 (beta)
+- **Database**: MongoDB with Mongoose
+- **Payments**: Stripe
+- **Email**: Resend
 
 ## Get Started
 
-1. Follow the [Get Started Tutorial](https://shipfa.st/docs) to clone the repo and run your local server 💻
-
-<sub>**Looking for the /pages router version?** Use this [documentation](https://shipfa.st/docs-old) instead</sub>
-
-2. Follow the [Ship In 5 Minutes Tutorial](https://shipfa.st/docs/tutorials/ship-in-5-minutes) to learn the foundation and ship your app quickly ⚡️
+1. Clone the repository
+2. Install dependencies: `npm install`
+3. Set up environment variables (see `.env.example`)
+4. Run the development server: `npm run dev`
 
 ## Links
 
--   [📚 Documentation](https://shipfa.st/docs)
--   [📣 Updates](https://shipfast.beehiiv.com/)
--   [🧑‍💻 Discord](https://shipfa.st/dashboard)
--   [🥇 Leaderboard](https://shipfa.st/leaderboard)
+- [Documentation](https://alfred.rocks/docs)
+- [Support](mailto:support@alfred.rocks)
 
-## Support
+## License
 
-Reach out at hello@shipfa.st
-
-Let's ship it, FAST ⚡️
-
-
-**📈 Grow your startup with [DataFast](https://datafa.st?ref=shipfast_readme)**
-
--   Analyze your traffic
--   Get insights on your customers
--   Make data-driven decisions
-
-ShipFast members get 30% OFF on all plans! 🎁
-
-![datafast](https://github.com/user-attachments/assets/085453a6-8a66-45be-b7ea-a7a08e856ed8)
+Copyright © 2024 Alfred. All rights reserved.
