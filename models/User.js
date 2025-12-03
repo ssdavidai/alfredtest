@@ -36,6 +36,50 @@ const userSchema = mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // VM Provisioning Fields
+    vmSubdomain: {
+      type: String,
+      trim: true,
+    },
+    vmIp: {
+      type: String,
+      trim: true,
+    },
+    vmStatus: {
+      type: String,
+      enum: ['pending', 'provisioning', 'ready', 'error'],
+      default: 'pending',
+    },
+    vmHetznerId: {
+      type: String,
+    },
+    vmAuthSecretHash: {
+      type: String,
+    },
+    vmPublicKey: {
+      type: String,
+    },
+    vmProvisionedAt: {
+      type: Date,
+    },
+    // LemonSqueezy Integration
+    lemonsqueezyCustomerId: {
+      type: String,
+    },
+    lemonsqueezySubscriptionId: {
+      type: String,
+    },
+    subscriptionStatus: {
+      type: String,
+      enum: ['active', 'cancelled', 'past_due'],
+    },
+    // API Key fields
+    apiKey: {
+      type: String,
+    },
+    apiKeyHash: {
+      type: String,
+    },
   },
   {
     timestamps: true,
