@@ -5,6 +5,7 @@ import connectMongo from "@/libs/mongoose";
 import configFile from "@/config";
 import User from "@/models/User";
 import { findCheckoutSession } from "@/libs/stripe";
+import { provisionVM } from "@/libs/provisioning";
 
 // Initialize Stripe only if the secret key is available
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
@@ -85,6 +86,11 @@ export async function POST(req) {
         user.customerId = customerId;
         user.hasAccess = true;
         await user.save();
+
+        // Trigger VM provisioning asynchronously
+        provisionVM(user._id.toString()).catch(err => {
+          console.error(`VM provisioning failed for user ${user._id}:`, err);
+        });
 
         // Extra: send email with user link, product page, etc...
         // try {
