@@ -62,17 +62,6 @@ const userSchema = mongoose.Schema(
     vmProvisionedAt: {
       type: Date,
     },
-    // LemonSqueezy Integration
-    lemonsqueezyCustomerId: {
-      type: String,
-    },
-    lemonsqueezySubscriptionId: {
-      type: String,
-    },
-    subscriptionStatus: {
-      type: String,
-      enum: ['active', 'cancelled', 'past_due'],
-    },
     // API key for programmatic access
     apiKey: {
       type: String,
