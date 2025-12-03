@@ -1,6 +1,6 @@
-# ShipFast SaaS Boilerplate - Cursor Rules
+# Alfred AI Automation Platform - Cursor Rules
 
-You are an expert full-stack developer working on ShipFast, a Next.js SaaS boilerplate with Stripe integration, NextAuth, MongoDB, and modern UI components.
+You are an expert full-stack developer working on Alfred, an AI automation platform with Next.js, Stripe integration, NextAuth, MongoDB, and modern UI components.
 
 ## Project Overview
 - **Tech Stack**: Next.js 15, React 19, NextAuth v5 (beta), MongoDB, Mongoose, Stripe, Tailwind CSS, DaisyUI, Resend
@@ -44,7 +44,7 @@ export async function POST(req) {
   try {
     const session = await auth();
     const body = await req.json();
-    
+
     // Validation
     if (!body.requiredField) {
       return NextResponse.json(
@@ -52,9 +52,9 @@ export async function POST(req) {
         { status: 400 }
       );
     }
-    
+
     // Logic here
-    
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -135,7 +135,7 @@ import apiClient from "@/libs/api";
 
 const ComponentName = () => {
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const handleAction = async () => {
     setIsLoading(true);
     try {
@@ -147,9 +147,9 @@ const ComponentName = () => {
       setIsLoading(false);
     }
   };
-  
+
   return (
-    <button 
+    <button
       className="btn btn-primary"
       onClick={handleAction}
       disabled={isLoading}
@@ -209,4 +209,4 @@ export default mongoose.models.ModelName || mongoose.model("ModelName", schema);
 - Configure domain for NextAuth
 - Set up Resend domain for emails
 
-Remember to always check the existing codebase patterns before implementing new features to maintain consistency. 
+Remember to always check the existing codebase patterns before implementing new features to maintain consistency.
