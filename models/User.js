@@ -36,6 +36,31 @@ const userSchema = mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // VM provisioning fields
+    vmSubdomain: {
+      type: String,
+      trim: true,
+    },
+    vmIp: {
+      type: String,
+    },
+    vmStatus: {
+      type: String,
+      enum: ['pending', 'provisioning', 'ready', 'error'],
+      default: 'pending',
+    },
+    vmHetznerId: {
+      type: String,
+    },
+    vmAuthSecretHash: {
+      type: String,
+    },
+    vmPublicKey: {
+      type: String,
+    },
+    vmProvisionedAt: {
+      type: Date,
+    },
   },
   {
     timestamps: true,
