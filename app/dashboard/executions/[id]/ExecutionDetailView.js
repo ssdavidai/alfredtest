@@ -1,35 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import apiClient from "@/libs/api";
-
-// Status badge component
-const StatusBadge = ({ status }) => {
-  const getStatusColor = () => {
-    switch (status?.toLowerCase()) {
-      case "completed":
-      case "success":
-        return "badge-success";
-      case "running":
-      case "in_progress":
-        return "badge-info";
-      case "failed":
-      case "error":
-        return "badge-error";
-      case "pending":
-        return "badge-warning";
-      default:
-        return "badge-ghost";
-    }
-  };
-
-  return (
-    <div className={`badge ${getStatusColor()} badge-lg`}>
-      {status || "Unknown"}
-    </div>
-  );
-};
+import { ExecutionStatusBadge } from "@/components/StatusBadge";
 
 // Trace step item component with accordion
 const TraceStepItem = ({ step, index, isOpen, toggleOpen }) => {
@@ -127,7 +101,7 @@ const formatDuration = (ms) => {
 // Calculate estimated cost based on token usage
 const calculateCost = (tokens) => {
   if (!tokens) return "N/A";
-  // Example pricing: $0.015 per 1K input tokens, $0.075 per 1K output tokens (Claude Sonnet 4.5 pricing)
+  // Claude Sonnet 4.5 pricing: $0.015 per 1K input tokens, $0.075 per 1K output tokens
   const inputCost = ((tokens.input || 0) / 1000) * 0.015;
   const outputCost = ((tokens.output || 0) / 1000) * 0.075;
   const total = inputCost + outputCost;
@@ -140,27 +114,57 @@ export default function ExecutionDetailView({ executionId }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [openSteps, setOpenSteps] = useState({});
+  const pollingIntervalRef = useRef(null);
 
   useEffect(() => {
     fetchExecution();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [executionId]);
 
-  const fetchExecution = async () => {
+  // Set up polling for running executions
+  useEffect(() => {
+    if (execution && isExecutionRunning(execution.status)) {
+      pollingIntervalRef.current = setInterval(() => {
+        fetchExecution(true);
+      }, 2000); // Poll every 2 seconds
+    } else {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    }
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, [execution?.status]);
+
+  const isExecutionRunning = (status) => {
+    const runningStatuses = ["running", "in_progress", "pending"];
+    return runningStatuses.includes(status?.toLowerCase());
+  };
+
+  const fetchExecution = async (isPolling = false) => {
     try {
-      setLoading(true);
+      if (!isPolling) {
+        setLoading(true);
+      }
       setError(null);
       const data = await apiClient.get(`/proxy/vm/executions/${executionId}`);
       setExecution(data);
-      // Open first step by default
-      if (data.trace?.length > 0) {
+      // Open first step by default on initial load
+      if (!isPolling && data.trace?.length > 0) {
         setOpenSteps({ 0: true });
       }
     } catch (err) {
       console.error("Failed to fetch execution:", err);
       setError(err.message || "Failed to load execution details");
     } finally {
-      setLoading(false);
+      if (!isPolling) {
+        setLoading(false);
+      }
     }
   };
 
@@ -251,61 +255,131 @@ export default function ExecutionDetailView({ executionId }) {
       {/* Execution Header */}
       <div className="card bg-base-200">
         <div className="card-body">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="space-y-2">
-              <h1 className="text-3xl font-bold">
-                {execution.skillName || execution.skill || "Unknown Skill"}
-              </h1>
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+            <div className="space-y-3 flex-1">
+              <div className="flex items-center gap-3">
+                <h1 className="text-3xl font-bold">
+                  {execution.skillName || execution.skill || "Unknown Skill"}
+                </h1>
+                {isExecutionRunning(execution.status) && (
+                  <div className="badge badge-sm badge-ghost">
+                    Auto-refreshing
+                  </div>
+                )}
+              </div>
               <div className="flex flex-wrap items-center gap-3">
-                <StatusBadge status={execution.status} />
-                <div className="badge badge-outline">
-                  Duration: {formatDuration(execution.duration)}
-                </div>
-                {execution.createdAt && (
-                  <div className="text-sm text-base-content-secondary">
-                    {new Date(execution.createdAt).toLocaleString()}
+                <ExecutionStatusBadge status={execution.status} />
+                {execution.triggerType && (
+                  <div className="badge badge-outline badge-lg">
+                    {execution.triggerType === "manual" && "Manual Trigger"}
+                    {execution.triggerType === "schedule" && "Scheduled"}
+                    {execution.triggerType === "webhook" && "Webhook"}
+                    {!["manual", "schedule", "webhook"].includes(execution.triggerType) && execution.triggerType}
+                  </div>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                {execution.startTime && (
+                  <div>
+                    <span className="text-base-content-secondary font-semibold">Start Time:</span>
+                    <div>{new Date(execution.startTime).toLocaleString()}</div>
+                  </div>
+                )}
+                {execution.completionTime && (
+                  <div>
+                    <span className="text-base-content-secondary font-semibold">Completion Time:</span>
+                    <div>{new Date(execution.completionTime).toLocaleString()}</div>
+                  </div>
+                )}
+                {execution.duration !== undefined && (
+                  <div>
+                    <span className="text-base-content-secondary font-semibold">Duration:</span>
+                    <div>{formatDuration(execution.duration)}</div>
+                  </div>
+                )}
+                {execution.createdAt && !execution.startTime && (
+                  <div>
+                    <span className="text-base-content-secondary font-semibold">Created At:</span>
+                    <div>{new Date(execution.createdAt).toLocaleString()}</div>
                   </div>
                 )}
               </div>
             </div>
-            <div className="stats shadow">
-              <div className="stat place-items-center">
-                <div className="stat-title">Tokens</div>
-                <div className="stat-value text-2xl">
-                  {(execution.tokens?.total ||
-                    (execution.tokens?.input || 0) +
-                      (execution.tokens?.output || 0) ||
-                    0).toLocaleString()}
-                </div>
-                <div className="stat-desc">
-                  Est. Cost: {calculateCost(execution.tokens)}
+            {execution.tokens && (
+              <div className="stats shadow">
+                <div className="stat place-items-center">
+                  <div className="stat-title">Tokens</div>
+                  <div className="stat-value text-2xl">
+                    {(execution.tokens?.total ||
+                      (execution.tokens?.input || 0) +
+                        (execution.tokens?.output || 0) ||
+                      0).toLocaleString()}
+                  </div>
+                  <div className="stat-desc">
+                    Est. Cost: {calculateCost(execution.tokens)}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Input Section */}
+      {/* Error Alert - Prominent if execution failed */}
+      {(execution.status?.toLowerCase() === "failed" ||
+        execution.status?.toLowerCase() === "error") &&
+       execution.error && (
+        <div className="alert alert-error shadow-lg">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="stroke-current shrink-0 h-6 w-6"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+          <div className="flex-1">
+            <h3 className="font-bold">Execution Failed</h3>
+            <div className="text-sm">
+              {typeof execution.error === "string"
+                ? execution.error
+                : execution.errorMessage || JSON.stringify(execution.error)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Input Section - Collapsible */}
       {execution.input && (
-        <div className="card bg-base-100 shadow">
-          <div className="card-body">
-            <h2 className="card-title text-xl">Input</h2>
-            <pre className="bg-base-200 p-4 rounded-lg text-sm overflow-x-auto">
+        <div className="collapse collapse-arrow bg-base-100 shadow">
+          <input type="checkbox" defaultChecked />
+          <div className="collapse-title text-xl font-semibold">
+            Input Data
+          </div>
+          <div className="collapse-content">
+            <pre className="bg-base-200 p-4 rounded-lg text-sm overflow-x-auto max-h-96">
               {typeof execution.input === "string"
                 ? execution.input
-                : JSON.stringify(execution.output, null, 2)}
+                : JSON.stringify(execution.input, null, 2)}
             </pre>
           </div>
         </div>
       )}
 
-      {/* Output Section */}
+      {/* Output Section - Collapsible */}
       {execution.output && (
-        <div className="card bg-base-100 shadow">
-          <div className="card-body">
-            <h2 className="card-title text-xl">Output</h2>
-            <pre className="bg-base-200 p-4 rounded-lg text-sm overflow-x-auto">
+        <div className="collapse collapse-arrow bg-base-100 shadow">
+          <input type="checkbox" defaultChecked />
+          <div className="collapse-title text-xl font-semibold">
+            Output / Result
+          </div>
+          <div className="collapse-content">
+            <pre className="bg-base-200 p-4 rounded-lg text-sm overflow-x-auto max-h-96">
               {typeof execution.output === "string"
                 ? execution.output
                 : JSON.stringify(execution.output, null, 2)}
@@ -319,7 +393,12 @@ export default function ExecutionDetailView({ executionId }) {
         <div className="card bg-base-100 shadow">
           <div className="card-body">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="card-title text-xl">Execution Trace</h2>
+              <div>
+                <h2 className="card-title text-xl">Full Conversation Trace</h2>
+                <p className="text-sm text-base-content-secondary mt-1">
+                  Step-by-step execution details with inputs, outputs, and errors
+                </p>
+              </div>
               <div className="flex gap-2">
                 <button
                   className="btn btn-sm btn-ghost"
@@ -361,7 +440,12 @@ export default function ExecutionDetailView({ executionId }) {
         <div className="card bg-base-100 shadow">
           <div className="card-body">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="card-title text-xl">Execution Steps</h2>
+              <div>
+                <h2 className="card-title text-xl">Execution Steps</h2>
+                <p className="text-sm text-base-content-secondary mt-1">
+                  Step-by-step execution details with inputs, outputs, and errors
+                </p>
+              </div>
               <div className="flex gap-2">
                 <button
                   className="btn btn-sm btn-ghost"
@@ -398,23 +482,11 @@ export default function ExecutionDetailView({ executionId }) {
         </div>
       )}
 
-      {/* Metadata Section */}
-      {execution.metadata && (
-        <div className="card bg-base-100 shadow">
-          <div className="card-body">
-            <h2 className="card-title text-xl">Metadata</h2>
-            <pre className="bg-base-200 p-4 rounded-lg text-sm overflow-x-auto">
-              {JSON.stringify(execution.metadata, null, 2)}
-            </pre>
-          </div>
-        </div>
-      )}
-
       {/* Token Breakdown */}
       {execution.tokens && (
         <div className="card bg-base-100 shadow">
           <div className="card-body">
-            <h2 className="card-title text-xl">Token Usage</h2>
+            <h2 className="card-title text-xl">Token Usage & Cost</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="stat bg-base-200 rounded-lg">
                 <div className="stat-title">Input Tokens</div>
@@ -436,6 +508,18 @@ export default function ExecutionDetailView({ executionId }) {
                 <div className="stat-desc">Estimated</div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Metadata Section */}
+      {execution.metadata && (
+        <div className="card bg-base-100 shadow">
+          <div className="card-body">
+            <h2 className="card-title text-xl">Metadata</h2>
+            <pre className="bg-base-200 p-4 rounded-lg text-sm overflow-x-auto">
+              {JSON.stringify(execution.metadata, null, 2)}
+            </pre>
           </div>
         </div>
       )}
