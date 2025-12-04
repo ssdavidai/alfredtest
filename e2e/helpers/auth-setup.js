@@ -24,11 +24,12 @@ async function authenticateTestUser(page, request) {
   console.log(`[Auth] Base URL: ${baseURL}`);
 
   try {
-    // Call the test-login endpoint
+    // Call the test-login endpoint with skipProvisioning for E2E tests
     const response = await request.post(`${baseURL}/api/auth/test-login`, {
       data: {
         secret: E2E_TEST_SECRET,
         email: TEST_USER_EMAIL,
+        skipProvisioning: true, // Pre-provision VM for E2E tests
       },
     });
 

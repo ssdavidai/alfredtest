@@ -29,7 +29,7 @@ export async function POST(req) {
     }
 
     const body = await req.json();
-    const { secret, email } = body;
+    const { secret, email, skipProvisioning, reset } = body;
 
     // Validate secret
     if (secret !== TEST_SECRET) {
@@ -47,27 +47,46 @@ export async function POST(req) {
       );
     }
 
-    // Find or create the test user in database with full test access
+    // Find or create the test user in database with subscription access
     await connectMongo();
     let user = await User.findOne({ email: TEST_USER_EMAIL });
 
     if (!user) {
       // Create the test user if it doesn't exist
-      user = await User.create({
+      // Only set hasAccess: true, let user trigger provisioning manually
+      const userData = {
         email: TEST_USER_EMAIL,
         name: "E2E Test User",
         hasAccess: true,
-        vmStatus: 'ready',
-        vmSubdomain: 'test-demo',
-        vmIp: '127.0.0.1',
-      });
+      };
+
+      // If skipProvisioning=true (for E2E tests), pre-provision the VM
+      if (skipProvisioning) {
+        userData.vmStatus = 'ready';
+        userData.vmSubdomain = 'test-demo';
+        userData.vmIp = '127.0.0.1';
+      }
+
+      user = await User.create(userData);
     } else {
-      // Ensure test user has the required fields for testing
+      // Ensure test user has subscription access
       const updates = {};
       if (!user.hasAccess) updates.hasAccess = true;
-      if (user.vmStatus !== 'ready') updates.vmStatus = 'ready';
-      if (!user.vmSubdomain) updates.vmSubdomain = 'test-demo';
-      if (!user.vmIp) updates.vmIp = '127.0.0.1';
+
+      // If reset=true, clear VM fields to test provisioning flow
+      if (reset) {
+        updates.vmStatus = 'pending';
+        updates.vmSubdomain = null;
+        updates.vmIp = null;
+        updates.vmHetznerId = null;
+        updates.vmProvisionedAt = null;
+      }
+      // If skipProvisioning=true, set up VM fields for E2E tests
+      else if (skipProvisioning) {
+        if (user.vmStatus !== 'ready') updates.vmStatus = 'ready';
+        if (!user.vmSubdomain) updates.vmSubdomain = 'test-demo';
+        if (!user.vmIp) updates.vmIp = '127.0.0.1';
+      }
 
       if (Object.keys(updates).length > 0) {
         await User.findByIdAndUpdate(user._id, updates);
