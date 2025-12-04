@@ -47,8 +47,8 @@ if (providers.length === 0) {
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
 
-  // Enable debug mode to troubleshoot issues
-  debug: true,
+  // Debug mode - enable for troubleshooting auth issues
+  debug: process.env.NODE_ENV === "development",
 
   // Trust the host header (required for custom domains on Vercel)
   trustHost: true,
