@@ -91,8 +91,8 @@ export default function Dashboard() {
 
   // Show provisioning status only if user has access AND VM is actively provisioning
   const showProvisioning = userStatus?.hasAccess && userStatus?.vmStatus === "provisioning";
-  // Show start setup button if user has access but hasn't started provisioning
-  const showStartSetup = userStatus?.hasAccess && (!userStatus?.vmStatus || userStatus?.vmStatus === "pending");
+  // Show start setup button if user has access but hasn't started provisioning OR if there was an error
+  const showStartSetup = userStatus?.hasAccess && (!userStatus?.vmStatus || userStatus?.vmStatus === "pending" || userStatus?.vmStatus === "error");
 
   return (
     <main className="min-h-screen p-8 pb-24">
@@ -100,18 +100,28 @@ export default function Dashboard() {
         <ButtonAccount />
         <h1 className="text-3xl md:text-4xl font-extrabold">Dashboard</h1>
 
-        {/* Start Setup Button (shown when user has access but VM not started) */}
+        {/* Start Setup Button (shown when user has access but VM not started or error) */}
         {showStartSetup && (
           <div className="card bg-base-200">
             <div className="card-body">
-              <h2 className="card-title">Welcome to Alfred!</h2>
-              <p className="text-base-content/70">
-                Your subscription is active. Click below to set up your dedicated AI automation VM
-                with LibreChat, NocoDB, and unlimited MCP connections.
-              </p>
-              <p className="text-sm text-base-content/50">
-                This will take approximately 3-5 minutes.
-              </p>
+              <h2 className="card-title">
+                {userStatus?.vmStatus === "error" ? "Setup Failed" : "Welcome to Alfred!"}
+              </h2>
+              {userStatus?.vmStatus === "error" ? (
+                <p className="text-error">
+                  There was an issue setting up your VM. Click below to try again.
+                </p>
+              ) : (
+                <>
+                  <p className="text-base-content/70">
+                    Your subscription is active. Click below to set up your dedicated AI automation VM
+                    with LibreChat, NocoDB, and unlimited MCP connections.
+                  </p>
+                  <p className="text-sm text-base-content/50">
+                    This will take approximately 3-5 minutes.
+                  </p>
+                </>
+              )}
               <div className="card-actions mt-4">
                 <button
                   className="btn btn-primary"
@@ -121,8 +131,10 @@ export default function Dashboard() {
                   {isProvisioning ? (
                     <>
                       <span className="loading loading-spinner loading-sm"></span>
-                      Starting...
+                      Setting up...
                     </>
+                  ) : userStatus?.vmStatus === "error" ? (
+                    "Retry Setup"
                   ) : (
                     "Start Setup"
                   )}
