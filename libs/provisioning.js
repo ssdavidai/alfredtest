@@ -5,6 +5,8 @@
 
 import { generateCloudInit } from "./cloudinit";
 import crypto from "crypto";
+import connectMongo from "./mongoose";
+import User from "@/models/User";
 
 /**
  * Generate a secure auth secret for VM authentication
@@ -12,6 +14,132 @@ import crypto from "crypto";
  */
 export function generateAuthSecret() {
   return crypto.randomBytes(32).toString("base64");
+}
+
+/**
+ * Generate a random subdomain (adjective-noun combination)
+ * @returns {string} Random subdomain like 'cozy-peanut'
+ */
+function generateRandomSubdomain() {
+  const adjectives = [
+    'agile', 'azure', 'bold', 'brave', 'bright', 'calm', 'clear', 'clever',
+    'cosmic', 'cozy', 'crisp', 'daring', 'deft', 'eager', 'epic', 'fair',
+    'fancy', 'fast', 'fierce', 'fine', 'fleet', 'fluffy', 'fresh', 'gentle',
+    'gleam', 'gold', 'grand', 'great', 'green', 'happy', 'hardy', 'hasty'
+  ];
+  const nouns = [
+    'acorn', 'apple', 'arrow', 'badge', 'beach', 'bear', 'bee', 'bell',
+    'berry', 'bird', 'bloom', 'boat', 'book', 'brook', 'bunny', 'cake',
+    'candle', 'cave', 'cedar', 'cherry', 'cliff', 'cloud', 'clover', 'coral',
+    'crane', 'creek', 'crown', 'daisy', 'dawn', 'deer', 'delta', 'dew'
+  ];
+
+  const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
+  const noun = nouns[Math.floor(Math.random() * nouns.length)];
+  return `${adjective}-${noun}`;
+}
+
+/**
+ * Provision a new VM
+ * Accepts either a userId string OR an options object for backwards compatibility
+ *
+ * @param {string|Object} userIdOrOptions - Either userId string or options object
+ * @param {string} userIdOrOptions.subdomain - The subdomain for the VM (when using options)
+ * @param {string} userIdOrOptions.userId - The user ID requesting the VM (when using options)
+ * @param {string} userIdOrOptions.provider - Cloud provider (when using options)
+ * @param {string} userIdOrOptions.region - Region for VM deployment (when using options)
+ * @param {string} userIdOrOptions.size - VM size/type (when using options)
+ * @returns {Promise<Object>} Provisioning result
+ */
+export async function provisionVM(userIdOrOptions) {
+  // Handle string userId parameter (simple signature)
+  if (typeof userIdOrOptions === 'string') {
+    return await provisionVMForUser(userIdOrOptions);
+  }
+
+  // Handle options object parameter (detailed signature)
+  return await provisionVMWithOptions(userIdOrOptions);
+}
+
+/**
+ * Simplified provisioning function that accepts just a userId
+ * @param {string} userId - The user ID
+ * @returns {Promise<Object>} Provisioning result
+ */
+async function provisionVMForUser(userId) {
+  try {
+    await connectMongo();
+
+    // Load user from database
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new Error(`User not found: ${userId}`);
+    }
+
+    // Check if user already has a VM
+    if (user.vmSubdomain) {
+      console.log(`User ${userId} already has VM: ${user.vmSubdomain}`);
+      return {
+        success: false,
+        error: 'User already has a provisioned VM',
+        subdomain: user.vmSubdomain
+      };
+    }
+
+    // Generate a unique subdomain
+    const subdomain = generateRandomSubdomain();
+
+    // Update user status to provisioning
+    user.vmStatus = 'provisioning';
+    user.vmSubdomain = subdomain;
+    await user.save();
+
+    console.log(`Starting VM provisioning for user ${userId} with subdomain ${subdomain}`);
+
+    // Call main provisioning function
+    const result = await provisionVMWithOptions({
+      subdomain,
+      userId: userId.toString(),
+      provider: 'hetzner',
+      region: 'fsn1',
+      size: 'cx21'
+    });
+
+    // Update user with provisioning results
+    if (result.success) {
+      user.vmStatus = 'ready';
+      user.vmIp = result.ipAddress;
+      user.vmHetznerId = result.vmId;
+      user.vmProvisionedAt = new Date();
+      await user.save();
+      console.log(`VM provisioning completed successfully for user ${userId}`);
+    } else {
+      user.vmStatus = 'error';
+      await user.save();
+      console.error(`VM provisioning failed for user ${userId}:`, result.error);
+    }
+
+    return result;
+  } catch (error) {
+    console.error(`Failed to provision VM for user ${userId}:`, error);
+
+    // Try to update user status to error
+    try {
+      await connectMongo();
+      const user = await User.findById(userId);
+      if (user) {
+        user.vmStatus = 'error';
+        await user.save();
+      }
+    } catch (dbError) {
+      console.error('Failed to update user status:', dbError);
+    }
+
+    return {
+      success: false,
+      error: error.message
+    };
+  }
 }
 
 /**
@@ -24,7 +152,7 @@ export function generateAuthSecret() {
  * @param {string} options.size - VM size/type
  * @returns {Promise<Object>} Provisioning result
  */
-export async function provisionVM({
+async function provisionVMWithOptions({
   subdomain,
   userId,
   provider = "hetzner",
