@@ -6,7 +6,10 @@ import config from "@/config"
 import connectMongo from "./mongo"
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  
+
+  // Trust the host header (required for custom domains on Vercel)
+  trustHost: true,
+
   // Set any random key in .env.local
   secret: process.env.NEXTAUTH_SECRET,
   
@@ -60,6 +63,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   session: {
     strategy: "jwt",
+  },
+  cookies: {
+    csrfToken: {
+      name: "next-auth.csrf-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: true,
+      },
+    },
   },
   theme: {
     brandColor: config.colors.main,
