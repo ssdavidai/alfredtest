@@ -24,15 +24,24 @@ export async function POST(req) {
       return NextResponse.json({ error: "VM already registered" }, { status: 400 });
     }
 
-    // Hash the auth secret (we never store plaintext)
-    const authSecretHash = await bcrypt.hash(authSecret, 10);
+    // Verify the auth secret matches what we stored during provisioning
+    if (!user.vmAuthSecretHash) {
+      return NextResponse.json({ error: "No auth secret expected for this VM" }, { status: 400 });
+    }
 
-    // Update user record
+    const isValidSecret = await bcrypt.compare(authSecret, user.vmAuthSecretHash);
+    if (!isValidSecret) {
+      console.error(`Invalid auth secret for subdomain ${subdomain}`);
+      return NextResponse.json({ error: "Invalid auth secret" }, { status: 401 });
+    }
+
+    // Update user record - VM is now verified and ready
     user.vmStatus = "ready";
-    user.vmAuthSecretHash = authSecretHash;
     user.vmPublicKey = publicKey || null;
     user.vmProvisionedAt = new Date();
     await user.save();
+
+    console.log(`VM registered successfully for subdomain ${subdomain}`);
 
     return NextResponse.json({
       success: true,

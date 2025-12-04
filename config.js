@@ -6,7 +6,7 @@ const config = {
   stripe: {
     plans: [{
       isFeatured: true,
-      priceId: process.env.NODE_ENV === "development" ? "price_1Niyy5AxyNprDp7iZIqEyD2h" : "price_456",
+      priceId: process.env.STRIPE_PRICE_ID || (process.env.NODE_ENV === "development" ? "price_1Niyy5AxyNprDp7iZIqEyD2h" : "price_456"),
       name: "Alfred Pro",
       description: "Complete AI automation infrastructure",
       price: 29,

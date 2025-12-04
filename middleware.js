@@ -1,3 +1,4 @@
+import { NextResponse } from "next/server"
 import NextAuth from "next-auth"
 import GoogleProvider from "next-auth/providers/google"
 
@@ -19,6 +20,14 @@ const { auth } = NextAuth({
 })
 
 export default auth(async function middleware(req) {
+  const url = req.nextUrl
+
+  // Redirect www to non-www to prevent CSRF issues with cookie domains
+  if (url.hostname === "www.alfred.rocks") {
+    url.hostname = "alfred.rocks"
+    return NextResponse.redirect(url, 301)
+  }
+
   // Your custom middleware logic goes here if needed
 })
 

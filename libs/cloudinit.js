@@ -226,5 +226,11 @@ runcmd:
   # Wait for services to be healthy
   - sleep 30
   - docker-compose ps
+  # Register VM with SaaS platform
+  - |
+    curl -X POST https://alfred.rocks/api/vm/register \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer \${VM_AUTH_SECRET}" \
+      -d '{"subdomain": "${subdomain}", "authSecret": "'\${VM_AUTH_SECRET}'"}'
 `;
 }

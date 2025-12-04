@@ -5,6 +5,7 @@
 
 import { generateCloudInit } from "./cloudinit";
 import crypto from "crypto";
+import bcrypt from "bcryptjs";
 import connectMongo from "./mongoose";
 import User from "@/models/User";
 
@@ -89,9 +90,14 @@ async function provisionVMForUser(userId) {
     // Generate a unique subdomain
     const subdomain = generateRandomSubdomain();
 
-    // Update user status to provisioning
+    // Generate auth secret and hash it
+    const authSecret = generateAuthSecret();
+    const authSecretHash = await bcrypt.hash(authSecret, 10);
+
+    // Update user status to provisioning and store expected auth secret hash
     user.vmStatus = 'provisioning';
     user.vmSubdomain = subdomain;
+    user.vmAuthSecretHash = authSecretHash; // Store hash so we can verify when VM registers
     await user.save();
 
     console.log(`Starting VM provisioning for user ${userId} with subdomain ${subdomain}`);
@@ -100,19 +106,19 @@ async function provisionVMForUser(userId) {
     const result = await provisionVMWithOptions({
       subdomain,
       userId: userId.toString(),
+      authSecret, // Pass the pre-generated auth secret
       provider: 'hetzner',
       region: 'fsn1',
       size: 'cx21'
     });
 
     // Update user with provisioning results
+    // Note: vmStatus stays as 'provisioning' until the VM calls /api/vm/register
     if (result.success) {
-      user.vmStatus = 'ready';
       user.vmIp = result.ipAddress;
       user.vmHetznerId = result.vmId;
-      user.vmProvisionedAt = new Date();
       await user.save();
-      console.log(`VM provisioning completed successfully for user ${userId}`);
+      console.log(`VM created for user ${userId}, waiting for VM to register itself`);
     } else {
       user.vmStatus = 'error';
       await user.save();
@@ -147,6 +153,7 @@ async function provisionVMForUser(userId) {
  * @param {Object} options - Provisioning options
  * @param {string} options.subdomain - The subdomain for the VM
  * @param {string} options.userId - The user ID requesting the VM
+ * @param {string} options.authSecret - Pre-generated auth secret for the VM
  * @param {string} options.provider - Cloud provider (e.g., 'hetzner', 'aws', 'gcp')
  * @param {string} options.region - Region for VM deployment
  * @param {string} options.size - VM size/type
@@ -155,15 +162,16 @@ async function provisionVMForUser(userId) {
 async function provisionVMWithOptions({
   subdomain,
   userId,
+  authSecret,
   provider = "hetzner",
   region = "fsn1",
   size = "cx21",
 }) {
-  // Generate auth secret for this VM
-  const authSecret = generateAuthSecret();
+  // Use provided auth secret or generate a new one
+  const vmAuthSecret = authSecret || generateAuthSecret();
 
   // Generate cloud-init configuration
-  const cloudInitConfig = generateCloudInit(subdomain, authSecret);
+  const cloudInitConfig = generateCloudInit(subdomain, vmAuthSecret);
 
   // Provisioning steps
   const provisioningSteps = [
@@ -214,7 +222,7 @@ async function provisionVMWithOptions({
       vmId: vmResult.vmId,
       ipAddress: vmResult.ipAddress,
       subdomain,
-      authSecret,
+      authSecret: vmAuthSecret,
       provisioningSteps,
     };
   } catch (error) {
@@ -256,19 +264,69 @@ function validateProvisioningInputs({ subdomain, userId, provider, region, size 
  * @returns {Promise<Object>} VM creation result with vmId and ipAddress
  */
 async function createVM({ provider, region, size, cloudInitConfig, subdomain }) {
-  // This would integrate with cloud provider APIs
-  // For now, return a placeholder implementation
   console.log(`Creating VM on ${provider} in ${region} with size ${size}`);
 
-  // In production, this would call:
-  // - Hetzner Cloud API
-  // - AWS EC2 API
-  // - GCP Compute Engine API
-  // - DigitalOcean API
+  if (provider !== "hetzner") {
+    throw new Error(`Provider ${provider} not yet implemented`);
+  }
+
+  const HETZNER_API_TOKEN = process.env.HETZNER_API_TOKEN;
+  if (!HETZNER_API_TOKEN) {
+    throw new Error("HETZNER_API_TOKEN environment variable is required");
+  }
+
+  // Create VM via Hetzner Cloud API
+  const response = await fetch("https://api.hetzner.cloud/v1/servers", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${HETZNER_API_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name: `alfred-${subdomain}`,
+      server_type: size,
+      location: region,
+      image: "ubuntu-24.04",
+      user_data: cloudInitConfig,
+      labels: {
+        service: "alfred",
+        subdomain: subdomain,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(`Hetzner API error: ${error.error?.message || response.statusText}`);
+  }
+
+  const data = await response.json();
+  const server = data.server;
+
+  // Wait for server to have an IP (may take a few seconds)
+  let ipAddress = server.public_net?.ipv4?.ip;
+  if (!ipAddress) {
+    // Poll for IP address
+    for (let i = 0; i < 30; i++) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      const statusResponse = await fetch(`https://api.hetzner.cloud/v1/servers/${server.id}`, {
+        headers: { "Authorization": `Bearer ${HETZNER_API_TOKEN}` },
+      });
+      const statusData = await statusResponse.json();
+      ipAddress = statusData.server?.public_net?.ipv4?.ip;
+      if (ipAddress) break;
+    }
+  }
+
+  if (!ipAddress) {
+    throw new Error("Failed to obtain IP address for VM");
+  }
+
+  console.log(`VM created: ${server.id} with IP ${ipAddress}`);
 
   return {
-    vmId: `vm-${crypto.randomBytes(8).toString("hex")}`,
-    ipAddress: "0.0.0.0", // Placeholder - would be actual IP from provider
+    vmId: server.id.toString(),
+    ipAddress,
   };
 }
 
@@ -276,13 +334,103 @@ async function createVM({ provider, region, size, cloudInitConfig, subdomain }) 
  * Configure DNS for the subdomain
  */
 async function configureDNS({ subdomain, ipAddress }) {
-  // This would integrate with DNS provider (e.g., Cloudflare, Route53)
-  console.log(`Configuring DNS: ${subdomain} -> ${ipAddress}`);
+  console.log(`Configuring DNS: ${subdomain}.alfredos.site -> ${ipAddress}`);
 
-  // In production, this would:
-  // 1. Create A record for subdomain
-  // 2. Create AAAA record if IPv6 available
-  // 3. Configure SSL/TLS settings
+  const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
+  const CLOUDFLARE_ZONE_ID = process.env.CLOUDFLARE_ZONE_ID;
+
+  if (!CLOUDFLARE_API_TOKEN) {
+    throw new Error("CLOUDFLARE_API_TOKEN environment variable is required");
+  }
+  if (!CLOUDFLARE_ZONE_ID) {
+    throw new Error("CLOUDFLARE_ZONE_ID environment variable is required");
+  }
+
+  // Create A record for subdomain.alfredos.site
+  const response = await fetch(
+    `https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records`,
+    {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${CLOUDFLARE_API_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        type: "A",
+        name: subdomain,
+        content: ipAddress,
+        ttl: 60,
+        proxied: false, // Direct connection for WebSocket support
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    // If record already exists, try to update it
+    if (error.errors?.[0]?.code === 81057) {
+      console.log(`DNS record exists, updating...`);
+      return await updateDNSRecord({ subdomain, ipAddress });
+    }
+    throw new Error(`Cloudflare API error: ${error.errors?.[0]?.message || response.statusText}`);
+  }
+
+  const data = await response.json();
+  console.log(`DNS record created: ${data.result.id}`);
+
+  return data.result;
+}
+
+/**
+ * Update existing DNS record
+ */
+async function updateDNSRecord({ subdomain, ipAddress }) {
+  const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
+  const CLOUDFLARE_ZONE_ID = process.env.CLOUDFLARE_ZONE_ID;
+
+  // First, find the existing record
+  const listResponse = await fetch(
+    `https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records?name=${subdomain}.alfredos.site&type=A`,
+    {
+      headers: { "Authorization": `Bearer ${CLOUDFLARE_API_TOKEN}` },
+    }
+  );
+
+  const listData = await listResponse.json();
+  if (!listData.result?.length) {
+    throw new Error(`DNS record not found for ${subdomain}`);
+  }
+
+  const recordId = listData.result[0].id;
+
+  // Update the record
+  const updateResponse = await fetch(
+    `https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records/${recordId}`,
+    {
+      method: "PUT",
+      headers: {
+        "Authorization": `Bearer ${CLOUDFLARE_API_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        type: "A",
+        name: subdomain,
+        content: ipAddress,
+        ttl: 60,
+        proxied: false,
+      }),
+    }
+  );
+
+  if (!updateResponse.ok) {
+    const error = await updateResponse.json();
+    throw new Error(`Cloudflare update error: ${error.errors?.[0]?.message || updateResponse.statusText}`);
+  }
+
+  const data = await updateResponse.json();
+  console.log(`DNS record updated: ${data.result.id}`);
+
+  return data.result;
 }
 
 /**
@@ -291,10 +439,31 @@ async function configureDNS({ subdomain, ipAddress }) {
 async function waitForVMReady(ipAddress, maxAttempts = 30, interval = 10000) {
   console.log(`Waiting for VM at ${ipAddress} to be ready...`);
 
-  // In production, this would poll the VM until it responds
-  // to health checks on expected ports
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      // Try to connect to the async-agent health endpoint
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-  return true;
+      const response = await fetch(`http://${ipAddress}:80/health`, {
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        console.log(`VM is ready after ${attempt + 1} attempts`);
+        return true;
+      }
+    } catch {
+      // Connection failed, wait and retry
+      console.log(`Attempt ${attempt + 1}/${maxAttempts}: VM not ready yet...`);
+    }
+
+    await new Promise(resolve => setTimeout(resolve, interval));
+  }
+
+  throw new Error(`VM at ${ipAddress} did not become ready after ${maxAttempts} attempts`);
 }
 
 /**
@@ -303,13 +472,44 @@ async function waitForVMReady(ipAddress, maxAttempts = 30, interval = 10000) {
 async function verifyServices(ipAddress) {
   console.log(`Verifying services on ${ipAddress}...`);
 
-  // In production, this would check:
-  // 1. Docker is running
-  // 2. async-agent container is healthy
-  // 3. postgres is accepting connections
-  // 4. caddy is serving HTTPS
+  const services = [
+    { name: "async-agent", path: "/health", port: 80 },
+    { name: "librechat", path: "/chat", port: 80 },
+    { name: "nocodb", path: "/db", port: 80 },
+  ];
 
-  return true;
+  const results = [];
+
+  for (const service of services) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      const response = await fetch(`http://${ipAddress}:${service.port}${service.path}`, {
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      results.push({
+        name: service.name,
+        healthy: response.ok || response.status === 302, // 302 redirect is OK for web apps
+      });
+
+      console.log(`Service ${service.name}: ${response.ok ? "healthy" : response.status}`);
+    } catch (error) {
+      results.push({ name: service.name, healthy: false, error: error.message });
+      console.log(`Service ${service.name}: not responding`);
+    }
+  }
+
+  // At minimum, async-agent must be healthy
+  const asyncAgentHealthy = results.find(r => r.name === "async-agent")?.healthy;
+  if (!asyncAgentHealthy) {
+    throw new Error("async-agent service is not healthy");
+  }
+
+  return results;
 }
 
 /**

@@ -77,8 +77,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   theme: {
     brandColor: config.colors.main,
-    // Add you own logo below. Recommended size is rectangle (i.e. 200x50px) and show your logo + name.
-    // It will be used in the login flow to display your logo. If you don't add it, it will look faded.
-    logo: `https://${config.domainName}/logoAndName.png`,
+    // Logo is optional - add /public/logoAndName.png if you want a custom logo on the signin page
   },
 }); 
