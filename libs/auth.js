@@ -5,6 +5,53 @@ import EmailProvider from "next-auth/providers/email"
 import config from "@/config"
 import connectMongo from "./mongo"
 
+// Build providers array based on available credentials
+const providers = [];
+
+// Add EmailProvider if MongoDB and Resend are configured
+if (connectMongo && process.env.RESEND_API_KEY) {
+  providers.push(
+    EmailProvider({
+      server: {
+        host: "smtp.resend.com",
+        port: 465,
+        auth: {
+          user: "resend",
+          pass: process.env.RESEND_API_KEY,
+        },
+      },
+      from: config.resend.fromNoReply,
+    })
+  );
+}
+
+// Add GoogleProvider if credentials are configured
+if (process.env.GOOGLE_ID && process.env.GOOGLE_SECRET) {
+  providers.push(
+    GoogleProvider({
+      clientId: process.env.GOOGLE_ID,
+      clientSecret: process.env.GOOGLE_SECRET,
+      async profile(profile) {
+        return {
+          id: profile.sub,
+          name: profile.given_name ? profile.given_name : profile.name,
+          email: profile.email,
+          image: profile.picture,
+          createdAt: new Date(),
+        };
+      },
+    })
+  );
+}
+
+// Log warning if no providers configured
+if (providers.length === 0) {
+  console.error("⚠️ No auth providers configured! Check environment variables:");
+  console.error("  - MONGODB_URI (for EmailProvider)");
+  console.error("  - RESEND_API_KEY (for EmailProvider)");
+  console.error("  - GOOGLE_ID and GOOGLE_SECRET (for GoogleProvider)");
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
 
   // Trust the host header (required for custom domains on Vercel)
@@ -12,45 +59,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
   // Set any random key in .env.local
   secret: process.env.NEXTAUTH_SECRET,
-  
-  // Add EmailProvider only for server-side usage (not edge-compatible)
-  providers: [
-    // Follow the "Login with Email" tutorial to set up your email server
-    // Requires a MongoDB database. Set MONGODB_URI env variable.
-    ...(connectMongo
-      ? [
-          EmailProvider({
-            server: {
-              host: "smtp.resend.com",
-              port: 465,
-              auth: {
-                user: "resend",
-                pass: process.env.RESEND_API_KEY,
-              },
-            },
-            from: config.resend.fromNoReply,
-          }),
-          GoogleProvider({
-            // Follow the "Login with Google" tutorial to get your credentials
-            clientId: process.env.GOOGLE_ID,
-            clientSecret: process.env.GOOGLE_SECRET,
-            async profile(profile) {
-              return {
-                id: profile.sub,
-                name: profile.given_name ? profile.given_name : profile.name,
-                email: profile.email,
-                image: profile.picture,
-                createdAt: new Date(),
-              };
-            },
-          }),
-        ]
-      : []),
-  ],
-  
-  // New users will be saved in Database (MongoDB Atlas). Each user (model) has some fields like name, email, image, etc..
-  // Requires a MongoDB database. Set MONGODB_URI env variable.
-  // Learn more about the model type: https://authjs.dev/concepts/database-models
+
+  providers,
+
+  // Use MongoDB adapter if available
   ...(connectMongo && { adapter: MongoDBAdapter(connectMongo) }),
 
   callbacks: {
@@ -77,6 +89,5 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   theme: {
     brandColor: config.colors.main,
-    // Logo is optional - add /public/logoAndName.png if you want a custom logo on the signin page
   },
 }); 
