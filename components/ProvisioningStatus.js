@@ -63,7 +63,7 @@ export default function ProvisioningStatus({ initialStatus }) {
             />
             <ul className="steps steps-vertical mt-4">
               {steps.map((step, i) => (
-                <li key={i} className={\`step \${step.done ? "step-primary" : ""}\`}>
+                <li key={i} className={`step ${step.done ? "step-primary" : ""}`}>
                   {step.label}
                 </li>
               ))}

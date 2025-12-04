@@ -39,6 +39,7 @@ export default function ConnectionsPage() {
   // Fetch connections on mount
   useEffect(() => {
     fetchConnections();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchConnections = async () => {
@@ -105,7 +106,7 @@ export default function ConnectionsPage() {
     }
   };
 
-  const handleAddConnection = async (newConnection) => {
+  const handleAddConnection = async () => {
     // Refresh the list after adding
     await fetchConnections();
   };

@@ -13,6 +13,7 @@
     "@auth/mongodb-adapter": "^3.7.4",
     "@headlessui/react": "^2.2.0",
     "axios": "^1.7.9",
+    "bcryptjs": "^3.0.3",
     "crisp-sdk-web": "^1.0.25",
     "date-fns": "^4.1.0",
     "eslint": "^9.17.0",

@@ -11,6 +11,7 @@ export default function SkillsPage() {
   const [error, setError] = useState(null);
   const [runningSkill, setRunningSkill] = useState(null);
   const [showTeachModal, setShowTeachModal] = useState(false);
+  // eslint-disable-next-line no-unused-vars
   const router = useRouter();
 
   useEffect(() => {

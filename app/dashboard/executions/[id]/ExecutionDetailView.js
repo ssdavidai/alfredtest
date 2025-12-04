@@ -139,6 +139,7 @@ export default function ExecutionDetailView({ executionId }) {
         clearInterval(pollingIntervalRef.current);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [execution?.status]);
 
   const isExecutionRunning = (status) => {
