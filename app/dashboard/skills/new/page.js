@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import apiClient from "@/libs/api";
 import { toast } from "react-hot-toast";
@@ -16,7 +16,9 @@ export default function NewSkillPage() {
     name: "",
     description: "",
     triggerType: "manual",
-    triggerConfig: {},
+    triggerConfig: {
+      cron: "0 9 * * *", // Default cron for schedule
+    },
     steps: [
       {
         id: 1,
@@ -25,7 +27,45 @@ export default function NewSkillPage() {
         allowedTools: [],
       },
     ],
+    connections: [], // Selected connection IDs
   });
+
+  // Connections state
+  const [availableConnections, setAvailableConnections] = useState([]);
+  const [isLoadingConnections, setIsLoadingConnections] = useState(false);
+
+  // Fetch connections on mount
+  useEffect(() => {
+    fetchConnections();
+  }, []);
+
+  const fetchConnections = async () => {
+    setIsLoadingConnections(true);
+    try {
+      // Use mock data similar to connections page
+      const mockConnections = [
+        {
+          id: "1",
+          name: "LibreChat",
+          type: "mcp_http",
+          status: "active",
+        },
+        {
+          id: "2",
+          name: "NocoDB",
+          type: "mcp_stdio",
+          status: "active",
+        },
+      ];
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      setAvailableConnections(mockConnections);
+    } catch (error) {
+      console.error("Failed to fetch connections:", error);
+      toast.error("Failed to load connections");
+    } finally {
+      setIsLoadingConnections(false);
+    }
+  };
 
   // Validation for each step
   const validateStep = (step) => {
@@ -41,6 +81,14 @@ export default function NewSkillPage() {
         }
         return true;
       case 2:
+        if (skillData.triggerType === "schedule") {
+          if (!skillData.triggerConfig.cron || !skillData.triggerConfig.cron.trim()) {
+            toast.error("Cron expression is required for scheduled triggers");
+            return false;
+          }
+        }
+        return true;
+      case 3:
         if (skillData.steps.length === 0) {
           toast.error("At least one step is required");
           return false;
@@ -52,7 +100,10 @@ export default function NewSkillPage() {
           }
         }
         return true;
-      case 3:
+      case 4:
+        // Connections are optional, no validation needed
+        return true;
+      case 5:
         return true;
       default:
         return false;
@@ -117,6 +168,21 @@ export default function NewSkillPage() {
     setSkillData({ ...skillData, steps: newSteps });
   };
 
+  const handleConnectionToggle = (connectionId) => {
+    const currentConnections = skillData.connections || [];
+    if (currentConnections.includes(connectionId)) {
+      setSkillData({
+        ...skillData,
+        connections: currentConnections.filter((id) => id !== connectionId),
+      });
+    } else {
+      setSkillData({
+        ...skillData,
+        connections: [...currentConnections, connectionId],
+      });
+    }
+  };
+
   const handleSubmit = async () => {
     if (!validateStep(currentStep)) {
       return;
@@ -128,7 +194,7 @@ export default function NewSkillPage() {
       // Prepare trigger config based on trigger type
       let triggerConfig = {};
       if (skillData.triggerType === "schedule") {
-        triggerConfig = { cron: "0 9 * * *" }; // Default: daily at 9am
+        triggerConfig = { cron: skillData.triggerConfig.cron };
       } else if (skillData.triggerType === "webhook") {
         triggerConfig = { method: "POST" }; // Default webhook config
       }
@@ -144,6 +210,7 @@ export default function NewSkillPage() {
           guidance: step.guidance.trim() || undefined,
           allowedTools: step.allowedTools.length > 0 ? step.allowedTools : undefined,
         })),
+        connections: skillData.connections.length > 0 ? skillData.connections : undefined,
         is_active: true,
       };
 
@@ -199,9 +266,15 @@ export default function NewSkillPage() {
               Basic Info
             </li>
             <li className={`step ${currentStep >= 2 ? "step-primary" : ""}`}>
-              Define Steps
+              Trigger
             </li>
             <li className={`step ${currentStep >= 3 ? "step-primary" : ""}`}>
+              Steps
+            </li>
+            <li className={`step ${currentStep >= 4 ? "step-primary" : ""}`}>
+              Connections
+            </li>
+            <li className={`step ${currentStep >= 5 ? "step-primary" : ""}`}>
               Review
             </li>
           </ul>
@@ -261,11 +334,18 @@ export default function NewSkillPage() {
                     </span>
                   </label>
                 </div>
+              </div>
+            )}
+
+            {/* Step 2: Trigger Type */}
+            {currentStep === 2 && (
+              <div className="space-y-6">
+                <h2 className="card-title text-2xl">Trigger Type</h2>
 
                 <div className="form-control">
                   <label className="label">
                     <span className="label-text font-semibold">
-                      Trigger Type *
+                      How should this skill be triggered? *
                     </span>
                   </label>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -354,11 +434,42 @@ export default function NewSkillPage() {
                     </label>
                   </div>
                 </div>
+
+                {/* Cron input for schedule trigger */}
+                {skillData.triggerType === "schedule" && (
+                  <div className="form-control">
+                    <label className="label">
+                      <span className="label-text font-semibold">
+                        Cron Expression *
+                      </span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="0 9 * * * (daily at 9am)"
+                      className="input input-bordered w-full font-mono"
+                      value={skillData.triggerConfig.cron}
+                      onChange={(e) =>
+                        setSkillData({
+                          ...skillData,
+                          triggerConfig: {
+                            ...skillData.triggerConfig,
+                            cron: e.target.value,
+                          },
+                        })
+                      }
+                    />
+                    <label className="label">
+                      <span className="label-text-alt text-base-content/60">
+                        Use standard cron format. Examples: 0 9 * * * (daily at 9am), 0 */2 * * * (every 2 hours)
+                      </span>
+                    </label>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Step 2: Define Steps */}
-            {currentStep === 2 && (
+            {/* Step 3: Define Steps */}
+            {currentStep === 3 && (
               <div className="space-y-6">
                 <div className="flex justify-between items-center">
                   <h2 className="card-title text-2xl">Define Steps</h2>
@@ -502,8 +613,79 @@ export default function NewSkillPage() {
               </div>
             )}
 
-            {/* Step 3: Review */}
-            {currentStep === 3 && (
+            {/* Step 4: Select Connections */}
+            {currentStep === 4 && (
+              <div className="space-y-6">
+                <h2 className="card-title text-2xl">Select Connections</h2>
+                <p className="text-base-content/70">
+                  Choose which integrations this skill can access (optional)
+                </p>
+
+                {isLoadingConnections && (
+                  <div className="flex justify-center py-8">
+                    <span className="loading loading-spinner loading-lg"></span>
+                  </div>
+                )}
+
+                {!isLoadingConnections && availableConnections.length === 0 && (
+                  <div className="text-center py-8">
+                    <p className="text-base-content/60">No connections available</p>
+                    <button
+                      onClick={() => router.push("/dashboard/connections")}
+                      className="btn btn-sm btn-primary mt-4"
+                    >
+                      Add Connections
+                    </button>
+                  </div>
+                )}
+
+                {!isLoadingConnections && availableConnections.length > 0 && (
+                  <div className="space-y-3">
+                    {availableConnections.map((connection) => (
+                      <label
+                        key={connection.id}
+                        className="flex items-center gap-3 p-4 border border-base-300 rounded-lg cursor-pointer hover:bg-base-200 transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          className="checkbox checkbox-primary"
+                          checked={skillData.connections.includes(connection.id)}
+                          onChange={() => handleConnectionToggle(connection.id)}
+                        />
+                        <div className="flex-1">
+                          <div className="font-semibold">{connection.name}</div>
+                          <div className="text-sm text-base-content/60">
+                            {connection.type} - {connection.status}
+                          </div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                <div className="alert alert-info">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    className="stroke-current shrink-0 w-6 h-6"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  <span>
+                    Selected connections will be available to the AI agent during skill execution
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Step 5: Review */}
+            {currentStep === 5 && (
               <div className="space-y-6">
                 <h2 className="card-title text-2xl">Review & Create</h2>
 
@@ -519,12 +701,26 @@ export default function NewSkillPage() {
                         <span className="font-semibold">Description:</span>{" "}
                         {skillData.description}
                       </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold text-lg mb-2">Trigger Configuration</h3>
+                    <div className="bg-base-200 rounded-lg p-4 space-y-2">
                       <div>
                         <span className="font-semibold">Trigger Type:</span>{" "}
                         <span className="badge badge-primary capitalize">
                           {skillData.triggerType}
                         </span>
                       </div>
+                      {skillData.triggerType === "schedule" && (
+                        <div>
+                          <span className="font-semibold">Cron:</span>{" "}
+                          <code className="bg-base-300 px-2 py-1 rounded">
+                            {skillData.triggerConfig.cron}
+                          </code>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -566,6 +762,28 @@ export default function NewSkillPage() {
                           )}
                         </div>
                       ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold text-lg mb-2">
+                      Connections ({skillData.connections.length})
+                    </h3>
+                    <div className="bg-base-200 rounded-lg p-4">
+                      {skillData.connections.length === 0 ? (
+                        <p className="text-sm text-base-content/60">No connections selected</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {skillData.connections.map((connId) => {
+                            const conn = availableConnections.find((c) => c.id === connId);
+                            return (
+                              <span key={connId} className="badge badge-outline">
+                                {conn?.name || connId}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -616,7 +834,7 @@ export default function NewSkillPage() {
                 Back
               </button>
 
-              {currentStep < 3 ? (
+              {currentStep < 5 ? (
                 <button
                   onClick={handleNext}
                   className="btn btn-primary"
