@@ -2,11 +2,39 @@
 
 import { useState, useEffect } from "react";
 import ButtonAccount from "@/components/ButtonAccount";
+import AddConnectionModal from "@/components/AddConnectionModal";
+import { ConnectionStatusBadge } from "@/components/StatusBadge";
+import apiClient from "@/libs/api";
 
 export default function ConnectionsPage() {
   const [connections, setConnections] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [isDeletingId, setIsDeletingId] = useState(null);
+  const [isDiscoveringId, setIsDiscoveringId] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Built-in system connections
+  const SYSTEM_CONNECTIONS = [
+    {
+      id: "librechat",
+      name: "LibreChat",
+      type: "mcp_http",
+      status: "active",
+      url: "https://cozy-peanut.alfredos.site/librechat",
+      isSystem: true,
+      toolsCount: 0,
+    },
+    {
+      id: "nocodb",
+      name: "NocoDB",
+      type: "mcp_stdio",
+      status: "active",
+      url: "https://cozy-peanut.alfredos.site/nocodb",
+      isSystem: true,
+      toolsCount: 0,
+    },
+  ];
 
   // Fetch connections on mount
   useEffect(() => {
@@ -15,32 +43,19 @@ export default function ConnectionsPage() {
 
   const fetchConnections = async () => {
     setIsLoading(true);
+    setError(null);
     try {
-      // Mock data for now - will connect to /api/proxy/vm/connections later
-      const mockConnections = [
-        {
-          id: "1",
-          name: "LibreChat",
-          type: "mcp_http",
-          status: "active",
-          url: "https://cozy-peanut.alfredos.site/librechat",
-          isSystem: true,
-        },
-        {
-          id: "2",
-          name: "NocoDB",
-          type: "mcp_stdio",
-          status: "active",
-          url: "https://cozy-peanut.alfredos.site/nocodb",
-          isSystem: true,
-        },
-      ];
+      // Fetch real connections from /api/proxy/vm/connections
+      const response = await apiClient.get("/proxy/vm/connections");
+      const userConnections = Array.isArray(response) ? response : [];
 
-      // Simulate API call delay
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      setConnections(mockConnections);
+      // Combine system connections with user connections
+      setConnections([...SYSTEM_CONNECTIONS, ...userConnections]);
     } catch (error) {
       console.error("Failed to fetch connections:", error);
+      setError(error.message || "Failed to fetch connections");
+      // On error, just show system connections
+      setConnections(SYSTEM_CONNECTIONS);
     } finally {
       setIsLoading(false);
     }
@@ -55,11 +70,7 @@ export default function ConnectionsPage() {
 
     setIsDeletingId(connectionId);
     try {
-      // TODO: Implement API call to delete connection
-      // await apiClient.delete(`/proxy/vm/connections/${connectionId}`);
-
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await apiClient.delete(`/proxy/vm/connections/${connectionId}`);
 
       // Remove from state
       setConnections((prev) => prev.filter((conn) => conn.id !== connectionId));
@@ -74,8 +85,29 @@ export default function ConnectionsPage() {
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  const getStatusColor = (status) => {
-    return status === "active" ? "bg-success" : "bg-error";
+  const handleDiscoverTools = async (connectionId) => {
+    setIsDiscoveringId(connectionId);
+    try {
+      const response = await apiClient.post(`/proxy/vm/connections/${connectionId}/discover`);
+
+      // Update the connection's tools count
+      setConnections((prev) =>
+        prev.map((conn) =>
+          conn.id === connectionId
+            ? { ...conn, toolsCount: response.toolsCount || response.tools?.length || 0 }
+            : conn
+        )
+      );
+    } catch (error) {
+      console.error("Failed to discover tools:", error);
+    } finally {
+      setIsDiscoveringId(null);
+    }
+  };
+
+  const handleAddConnection = async (newConnection) => {
+    // Refresh the list after adding
+    await fetchConnections();
   };
 
   const getTypeBadge = (type) => {
@@ -107,7 +139,7 @@ export default function ConnectionsPage() {
         <div className="flex justify-end">
           <button
             className="btn btn-primary"
-            onClick={() => alert("Add Connection feature coming soon!")}
+            onClick={() => setIsModalOpen(true)}
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -128,8 +160,28 @@ export default function ConnectionsPage() {
           </div>
         )}
 
-        {/* Connections List */}
-        {!isLoading && connections.length === 0 && (
+        {/* Error State */}
+        {!isLoading && error && (
+          <div className="alert alert-warning">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="stroke-current shrink-0 h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* Empty State */}
+        {!isLoading && !error && connections.length === 0 && (
           <div className="text-center py-12">
             <div className="text-base-content/50 mb-4">
               <svg
@@ -152,6 +204,7 @@ export default function ConnectionsPage() {
           </div>
         )}
 
+        {/* Connections List */}
         {!isLoading && connections.length > 0 && (
           <div className="grid gap-4">
             {connections.map((connection) => (
@@ -165,12 +218,9 @@ export default function ConnectionsPage() {
                     <div className="flex items-start gap-4 flex-1">
                       {/* Status Indicator */}
                       <div className="mt-1">
-                        <div
-                          className={`w-3 h-3 rounded-full ${getStatusColor(
-                            connection.status
-                          )}`}
-                          title={connection.status}
-                        ></div>
+                        <ConnectionStatusBadge
+                          isActive={connection.status === "active"}
+                        />
                       </div>
 
                       {/* Details */}
@@ -184,27 +234,37 @@ export default function ConnectionsPage() {
                           </span>
                           {connection.isSystem && (
                             <span className="badge badge-sm badge-info">
-                              System
+                              Built-in
                             </span>
                           )}
                         </div>
-                        <p className="text-sm text-base-content/70">
-                          Status:{" "}
-                          <span
-                            className={`font-medium ${
-                              connection.status === "active"
-                                ? "text-success"
-                                : "text-error"
-                            }`}
-                          >
-                            {connection.status}
-                          </span>
-                        </p>
+                        <div className="text-sm text-base-content/70 space-y-1">
+                          <p>
+                            Status:{" "}
+                            <span
+                              className={`font-medium ${
+                                connection.status === "active"
+                                  ? "text-success"
+                                  : "text-error"
+                              }`}
+                            >
+                              {connection.status}
+                            </span>
+                          </p>
+                          {connection.toolsCount !== undefined && (
+                            <p>
+                              Tools discovered:{" "}
+                              <span className="font-medium">
+                                {connection.toolsCount}
+                              </span>
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </div>
 
                     {/* Actions */}
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       {connection.url && (
                         <button
                           className="btn btn-sm btn-primary"
@@ -230,6 +290,30 @@ export default function ConnectionsPage() {
                           Open
                         </button>
                       )}
+                      <button
+                        className="btn btn-sm btn-outline"
+                        onClick={() => handleDiscoverTools(connection.id)}
+                        disabled={isDiscoveringId === connection.id}
+                      >
+                        {isDiscoveringId === connection.id ? (
+                          <>
+                            <span className="loading loading-spinner loading-xs"></span>
+                            Discovering...
+                          </>
+                        ) : (
+                          <>
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 20 20"
+                              fill="currentColor"
+                              className="w-4 h-4"
+                            >
+                              <path d="M10 3.75a2 2 0 10-4 0 2 2 0 004 0zM17.25 4.5a.75.75 0 000-1.5h-5.5a.75.75 0 000 1.5h5.5zM5 3.75a.75.75 0 01-.75.75h-1.5a.75.75 0 010-1.5h1.5a.75.75 0 01.75.75zM4.25 17a.75.75 0 000-1.5h-1.5a.75.75 0 000 1.5h1.5zM17.25 17a.75.75 0 000-1.5h-5.5a.75.75 0 000 1.5h5.5zM9 10a.75.75 0 01-.75.75h-5.5a.75.75 0 010-1.5h5.5A.75.75 0 019 10zM17.25 10.75a.75.75 0 000-1.5h-1.5a.75.75 0 000 1.5h1.5zM14 10a2 2 0 10-4 0 2 2 0 004 0zM10 16.25a2 2 0 10-4 0 2 2 0 004 0z" />
+                            </svg>
+                            Discover Tools
+                          </>
+                        )}
+                      </button>
                       {!connection.isSystem && (
                         <button
                           className="btn btn-sm btn-error btn-outline"
@@ -263,6 +347,13 @@ export default function ConnectionsPage() {
           </div>
         )}
       </section>
+
+      {/* Add Connection Modal */}
+      <AddConnectionModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onAdd={handleAddConnection}
+      />
     </main>
   );
 }
