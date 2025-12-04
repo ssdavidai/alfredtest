@@ -22,7 +22,7 @@ const config = {
     }],
   },
   aws: { bucket: "bucket-name", bucketUrl: `https://bucket-name.s3.amazonaws.com/`, cdn: "https://cdn-id.cloudfront.net/" },
-  resend: { fromNoReply: `Alfred <noreply@alfred.rocks>`, fromAdmin: `Alfred Team <hello@alfred.rocks>`, supportEmail: "support@alfred.rocks" },
+  resend: { fromNoReply: `Alfred <onboarding@resend.dev>`, fromAdmin: `Alfred Team <onboarding@resend.dev>`, supportEmail: "support@alfred.rocks" },
   colors: { theme: "light", main: "hsl(var(--p))" },
   auth: { loginUrl: "/api/auth/signin", callbackUrl: "/dashboard" },
 };
