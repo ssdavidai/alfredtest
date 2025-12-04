@@ -1,26 +1,18 @@
 import NextAuth from "next-auth"
 import { MongoDBAdapter } from "@auth/mongodb-adapter"
 import GoogleProvider from "next-auth/providers/google"
-import EmailProvider from "next-auth/providers/email"
+import Resend from "next-auth/providers/resend"
 import config from "@/config"
 import connectMongo from "./mongo"
 
 // Build providers array based on available credentials
 const providers = [];
 
-// Add EmailProvider if MongoDB and Resend are configured
+// Add Resend Email Provider if MongoDB and Resend are configured
 if (connectMongo && process.env.RESEND_API_KEY) {
   providers.push(
-    EmailProvider({
-      server: {
-        host: "smtp.resend.com",
-        port: 465,
-        secure: true, // Required for port 465 (SSL)
-        auth: {
-          user: "resend",
-          pass: process.env.RESEND_API_KEY,
-        },
-      },
+    Resend({
+      apiKey: process.env.RESEND_API_KEY,
       from: config.resend.fromNoReply,
     })
   );
@@ -55,8 +47,8 @@ if (providers.length === 0) {
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
 
-  // Enable debug mode in development
-  debug: process.env.NODE_ENV === "development",
+  // Enable debug mode to troubleshoot issues
+  debug: true,
 
   // Trust the host header (required for custom domains on Vercel)
   trustHost: true,
