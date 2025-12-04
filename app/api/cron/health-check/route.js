@@ -20,6 +20,8 @@
 import { NextResponse } from "next/server";
 import { checkAllVms } from "@/libs/health-monitor";
 
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/cron/health-check
  *
