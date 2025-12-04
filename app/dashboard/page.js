@@ -74,8 +74,8 @@ export default function Dashboard() {
     );
   }
 
-  // Show provisioning status if VM is not ready
-  const showProvisioning = userStatus?.vmStatus && userStatus.vmStatus !== "ready";
+  // Show provisioning status only if user has access AND VM is not ready
+  const showProvisioning = userStatus?.hasAccess && userStatus?.vmStatus && userStatus.vmStatus !== "ready";
 
   return (
     <main className="min-h-screen p-8 pb-24">
