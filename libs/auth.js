@@ -15,6 +15,7 @@ if (connectMongo && process.env.RESEND_API_KEY) {
       server: {
         host: "smtp.resend.com",
         port: 465,
+        secure: true, // Required for port 465 (SSL)
         auth: {
           user: "resend",
           pass: process.env.RESEND_API_KEY,
@@ -53,6 +54,9 @@ if (providers.length === 0) {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+
+  // Enable debug mode in development
+  debug: process.env.NODE_ENV === "development",
 
   // Trust the host header (required for custom domains on Vercel)
   trustHost: true,
