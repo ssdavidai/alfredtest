@@ -108,8 +108,9 @@ async function provisionVMForUser(userId) {
       userId: userId.toString(),
       authSecret, // Pass the pre-generated auth secret
       provider: 'hetzner',
-      region: 'fsn1',
-      size: 'cx21'
+      region: 'hel1',      // Helsinki
+      size: 'cx23',        // 2 vCPU, 4GB RAM
+      volumeSize: 30,      // 30GB attached volume
     });
 
     // Update user with provisioning results
@@ -157,6 +158,7 @@ async function provisionVMForUser(userId) {
  * @param {string} options.provider - Cloud provider (e.g., 'hetzner', 'aws', 'gcp')
  * @param {string} options.region - Region for VM deployment
  * @param {string} options.size - VM size/type
+ * @param {number} options.volumeSize - Size of attached volume in GB
  * @returns {Promise<Object>} Provisioning result
  */
 async function provisionVMWithOptions({
@@ -164,8 +166,9 @@ async function provisionVMWithOptions({
   userId,
   authSecret,
   provider = "hetzner",
-  region = "fsn1",
-  size = "cx21",
+  region = "hel1",
+  size = "cx23",
+  volumeSize = 30,
 }) {
   // Use provided auth secret or generate a new one
   const vmAuthSecret = authSecret || generateAuthSecret();
@@ -173,13 +176,11 @@ async function provisionVMWithOptions({
   // Generate cloud-init configuration
   const cloudInitConfig = generateCloudInit(subdomain, vmAuthSecret);
 
-  // Provisioning steps
+  // Provisioning steps (VM will register itself when ready via /api/vm/register)
   const provisioningSteps = [
     { step: "validate", status: "pending" },
     { step: "create_vm", status: "pending" },
     { step: "configure_dns", status: "pending" },
-    { step: "wait_for_ready", status: "pending" },
-    { step: "verify_services", status: "pending" },
   ];
 
   try {
@@ -196,6 +197,7 @@ async function provisionVMWithOptions({
       size,
       cloudInitConfig,
       subdomain,
+      volumeSize,
     });
     provisioningSteps[1].status = "completed";
 
@@ -207,15 +209,8 @@ async function provisionVMWithOptions({
     });
     provisioningSteps[2].status = "completed";
 
-    // Step 4: Wait for VM to be ready
-    provisioningSteps[3].status = "running";
-    await waitForVMReady(vmResult.ipAddress);
-    provisioningSteps[3].status = "completed";
-
-    // Step 5: Verify services are running
-    provisioningSteps[4].status = "running";
-    await verifyServices(vmResult.ipAddress);
-    provisioningSteps[4].status = "completed";
+    // Note: We return success here. The VM will call /api/vm/register when it's
+    // fully booted and services are running. This avoids Vercel function timeout.
 
     return {
       success: true,
@@ -263,8 +258,8 @@ function validateProvisioningInputs({ subdomain, userId, provider, region, size 
  * Create VM with cloud provider
  * @returns {Promise<Object>} VM creation result with vmId and ipAddress
  */
-async function createVM({ provider, region, size, cloudInitConfig, subdomain }) {
-  console.log(`Creating VM on ${provider} in ${region} with size ${size}`);
+async function createVM({ provider, region, size, cloudInitConfig, subdomain, volumeSize = 30 }) {
+  console.log(`Creating VM on ${provider} in ${region} with size ${size}, volume ${volumeSize}GB`);
 
   if (provider !== "hetzner") {
     throw new Error(`Provider ${provider} not yet implemented`);
@@ -275,7 +270,36 @@ async function createVM({ provider, region, size, cloudInitConfig, subdomain }) 
     throw new Error("HETZNER_API_TOKEN environment variable is required");
   }
 
-  // Create VM via Hetzner Cloud API
+  // Step 1: Create volume first
+  console.log(`Creating ${volumeSize}GB volume in ${region}...`);
+  const volumeResponse = await fetch("https://api.hetzner.cloud/v1/volumes", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${HETZNER_API_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name: `alfred-${subdomain}-data`,
+      size: volumeSize,
+      location: region,
+      format: "ext4",
+      labels: {
+        service: "alfred",
+        subdomain: subdomain,
+      },
+    }),
+  });
+
+  if (!volumeResponse.ok) {
+    const error = await volumeResponse.json();
+    throw new Error(`Hetzner Volume API error: ${error.error?.message || volumeResponse.statusText}`);
+  }
+
+  const volumeData = await volumeResponse.json();
+  const volumeId = volumeData.volume.id;
+  console.log(`Volume created: ${volumeId}`);
+
+  // Step 2: Create VM via Hetzner Cloud API with IPv4, IPv6, and attached volume
   const response = await fetch("https://api.hetzner.cloud/v1/servers", {
     method: "POST",
     headers: {
@@ -288,6 +312,11 @@ async function createVM({ provider, region, size, cloudInitConfig, subdomain }) 
       location: region,
       image: "ubuntu-24.04",
       user_data: cloudInitConfig,
+      volumes: [volumeId],
+      public_net: {
+        enable_ipv4: true,
+        enable_ipv6: true,
+      },
       labels: {
         service: "alfred",
         subdomain: subdomain,
@@ -297,6 +326,16 @@ async function createVM({ provider, region, size, cloudInitConfig, subdomain }) 
 
   if (!response.ok) {
     const error = await response.json();
+    // If server creation fails, try to delete the volume we just created
+    console.log(`Server creation failed, cleaning up volume ${volumeId}...`);
+    try {
+      await fetch(`https://api.hetzner.cloud/v1/volumes/${volumeId}`, {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${HETZNER_API_TOKEN}` },
+      });
+    } catch (cleanupError) {
+      console.error(`Failed to cleanup volume: ${cleanupError.message}`);
+    }
     throw new Error(`Hetzner API error: ${error.error?.message || response.statusText}`);
   }
 
@@ -305,6 +344,7 @@ async function createVM({ provider, region, size, cloudInitConfig, subdomain }) 
 
   // Wait for server to have an IP (may take a few seconds)
   let ipAddress = server.public_net?.ipv4?.ip;
+  let ipv6Address = server.public_net?.ipv6?.ip;
   if (!ipAddress) {
     // Poll for IP address
     for (let i = 0; i < 30; i++) {
@@ -314,6 +354,7 @@ async function createVM({ provider, region, size, cloudInitConfig, subdomain }) 
       });
       const statusData = await statusResponse.json();
       ipAddress = statusData.server?.public_net?.ipv4?.ip;
+      ipv6Address = statusData.server?.public_net?.ipv6?.ip;
       if (ipAddress) break;
     }
   }
@@ -322,11 +363,13 @@ async function createVM({ provider, region, size, cloudInitConfig, subdomain }) 
     throw new Error("Failed to obtain IP address for VM");
   }
 
-  console.log(`VM created: ${server.id} with IP ${ipAddress}`);
+  console.log(`VM created: ${server.id} with IPv4 ${ipAddress}, IPv6 ${ipv6Address || 'pending'}, volume ${volumeId}`);
 
   return {
     vmId: server.id.toString(),
     ipAddress,
+    ipv6Address,
+    volumeId: volumeId.toString(),
   };
 }
 
