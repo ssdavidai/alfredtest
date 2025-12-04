@@ -2,12 +2,11 @@
 
 import { Dialog, Transition } from "@headlessui/react";
 import { Fragment, useState } from "react";
+import apiClient from "@/libs/api";
 
 const CONNECTION_TYPES = [
-  { id: "api", name: "API", description: "Connect via REST API" },
-  { id: "database", name: "Database", description: "Direct database connection" },
-  { id: "webhook", name: "Webhook", description: "Receive webhook events" },
-  { id: "oauth", name: "OAuth", description: "OAuth 2.0 integration" },
+  { id: "mcp_stdio", name: "MCP Local", description: "Local MCP server via stdio" },
+  { id: "mcp_http", name: "MCP Remote", description: "Remote MCP server via HTTP" },
 ];
 
 // Modal component for adding new connections
@@ -15,9 +14,11 @@ const AddConnectionModal = ({ isOpen, onClose, onAdd }) => {
   const [formData, setFormData] = useState({
     name: "",
     type: "",
-    description: "",
-    apiKey: "",
-    endpoint: "",
+    command: "",
+    args: "",
+    env: "",
+    url: "",
+    headers: "",
   });
   const [isLoading, setIsLoading] = useState(false);
 
@@ -31,17 +32,56 @@ const AddConnectionModal = ({ isOpen, onClose, onAdd }) => {
     setIsLoading(true);
 
     try {
-      await onAdd?.({
-        ...formData,
-        status: "pending",
-        createdAt: new Date().toISOString(),
-      });
+      const config = {};
+
+      if (formData.type === "mcp_stdio") {
+        config.command = formData.command;
+        if (formData.args) {
+          try {
+            config.args = JSON.parse(formData.args);
+          } catch {
+            config.args = formData.args.split(",").map(s => s.trim());
+          }
+        }
+        if (formData.env) {
+          try {
+            config.env = JSON.parse(formData.env);
+          } catch {
+            config.env = {};
+          }
+        }
+      } else if (formData.type === "mcp_http") {
+        config.url = formData.url;
+        if (formData.headers) {
+          try {
+            config.headers = JSON.parse(formData.headers);
+          } catch {
+            config.headers = {};
+          }
+        }
+      }
+
+      const payload = {
+        name: formData.name,
+        type: formData.type,
+        config,
+      };
+
+      // POST to /api/proxy/vm/connections
+      const response = await apiClient.post("/proxy/vm/connections", payload);
+
+      // Call onAdd callback if provided
+      await onAdd?.(response);
+
+      // Reset form
       setFormData({
         name: "",
         type: "",
-        description: "",
-        apiKey: "",
-        endpoint: "",
+        command: "",
+        args: "",
+        env: "",
+        url: "",
+        headers: "",
       });
       onClose();
     } catch (error) {
@@ -107,7 +147,7 @@ const AddConnectionModal = ({ isOpen, onClose, onAdd }) => {
                       name="name"
                       value={formData.name}
                       onChange={handleChange}
-                      placeholder="My API Connection"
+                      placeholder="My MCP Connection"
                       className="input input-bordered w-full"
                       required
                     />
@@ -135,47 +175,85 @@ const AddConnectionModal = ({ isOpen, onClose, onAdd }) => {
                     </select>
                   </div>
 
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text font-medium">Description</span>
-                    </label>
-                    <textarea
-                      name="description"
-                      value={formData.description}
-                      onChange={handleChange}
-                      placeholder="Brief description of this connection..."
-                      className="textarea textarea-bordered w-full"
-                      rows={2}
-                    />
-                  </div>
+                  {formData.type === "mcp_stdio" && (
+                    <>
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text font-medium">Command</span>
+                        </label>
+                        <input
+                          type="text"
+                          name="command"
+                          value={formData.command}
+                          onChange={handleChange}
+                          placeholder="node"
+                          className="input input-bordered w-full"
+                          required
+                        />
+                      </div>
 
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text font-medium">API Key / Secret</span>
-                    </label>
-                    <input
-                      type="password"
-                      name="apiKey"
-                      value={formData.apiKey}
-                      onChange={handleChange}
-                      placeholder="Enter your API key"
-                      className="input input-bordered w-full"
-                    />
-                  </div>
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text font-medium">Arguments (JSON array or comma-separated)</span>
+                        </label>
+                        <input
+                          type="text"
+                          name="args"
+                          value={formData.args}
+                          onChange={handleChange}
+                          placeholder='["/path/to/server.js"] or /path/to/server.js'
+                          className="input input-bordered w-full"
+                        />
+                      </div>
 
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text font-medium">Endpoint URL</span>
-                    </label>
-                    <input
-                      type="url"
-                      name="endpoint"
-                      value={formData.endpoint}
-                      onChange={handleChange}
-                      placeholder="https://api.example.com/v1"
-                      className="input input-bordered w-full"
-                    />
-                  </div>
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text font-medium">Environment Variables (JSON)</span>
+                        </label>
+                        <textarea
+                          name="env"
+                          value={formData.env}
+                          onChange={handleChange}
+                          placeholder='{"API_KEY": "value", "DEBUG": "true"}'
+                          className="textarea textarea-bordered w-full"
+                          rows={3}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {formData.type === "mcp_http" && (
+                    <>
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text font-medium">URL</span>
+                        </label>
+                        <input
+                          type="url"
+                          name="url"
+                          value={formData.url}
+                          onChange={handleChange}
+                          placeholder="https://mcp-server.example.com"
+                          className="input input-bordered w-full"
+                          required
+                        />
+                      </div>
+
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text font-medium">Headers (JSON)</span>
+                        </label>
+                        <textarea
+                          name="headers"
+                          value={formData.headers}
+                          onChange={handleChange}
+                          placeholder='{"Authorization": "Bearer token", "Content-Type": "application/json"}'
+                          className="textarea textarea-bordered w-full"
+                          rows={3}
+                        />
+                      </div>
+                    </>
+                  )}
 
                   <div className="flex justify-end gap-3 mt-6">
                     <button
