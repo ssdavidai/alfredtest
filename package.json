@@ -7,7 +7,14 @@
     "build": "next build",
     "postbuild": "next-sitemap",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "test:api": "playwright test e2e/api.spec.js",
+    "test:auth": "playwright test e2e/auth.spec.js",
+    "test:dashboard": "playwright test e2e/dashboard.spec.js",
+    "test:onboarding": "playwright test e2e/onboarding.spec.js"
   },
   "dependencies": {
     "@auth/mongodb-adapter": "^3.7.4",
@@ -35,6 +42,7 @@
     "stripe": "^17.5.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.57.0",
     "@tailwindcss/postcss": "^4.0.0",
     "daisyui": "^5.0.50",
     "postcss": "^8.4.49",

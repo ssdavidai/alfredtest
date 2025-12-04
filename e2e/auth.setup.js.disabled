@@ -1,0 +1,278 @@
+// @ts-check
+const { test as setup, expect } = require('@playwright/test');
+const fs = require('fs');
+const path = require('path');
+
+/**
+ * Authentication Setup for E2E Tests
+ *
+ * This file handles authentication state management for Playwright tests.
+ * It creates authenticated browser contexts that can be reused across tests.
+ *
+ * Usage:
+ * - Run automatically as a dependency in playwright.config.js
+ * - Creates .auth directory with stored authentication state
+ * - Tests can use stored auth to skip login flow
+ */
+
+const STORAGE_STATE_PATH = path.join(__dirname, '../.auth/user.json');
+
+/**
+ * Setup authenticated user state
+ *
+ * This can be configured to:
+ * 1. Use a test account for automated testing
+ * 2. Mock authentication responses
+ * 3. Store real authentication cookies
+ */
+setup('authenticate user', async ({ page, context }) => {
+  console.log('Setting up authentication...');
+
+  // Ensure .auth directory exists
+  const authDir = path.dirname(STORAGE_STATE_PATH);
+  if (!fs.existsSync(authDir)) {
+    fs.mkdirSync(authDir, { recursive: true });
+  }
+
+  // Option 1: Navigate to landing page (for now, just validate it loads)
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: /Alfred/i })).toBeVisible();
+
+  // Option 2: Perform actual login (when test credentials are available)
+  /*
+  await page.goto('/api/auth/signin');
+
+  // Fill in test credentials
+  await page.fill('input[name="email"]', process.env.TEST_USER_EMAIL || 'test@example.com');
+  await page.fill('input[name="password"]', process.env.TEST_USER_PASSWORD || 'test-password');
+
+  // Submit login form
+  await page.click('button[type="submit"]');
+
+  // Wait for redirect to dashboard
+  await page.waitForURL('/dashboard');
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+  */
+
+  // Option 3: Mock authentication by setting cookies directly
+  /*
+  await context.addCookies([
+    {
+      name: 'next-auth.session-token',
+      value: 'mock-session-token',
+      domain: 'localhost',
+      path: '/',
+      httpOnly: true,
+      sameSite: 'Lax',
+      expires: Math.floor(Date.now() / 1000) + 86400 // 24 hours
+    }
+  ]);
+  */
+
+  // Option 4: Use API to get auth token
+  /*
+  const response = await page.request.post('/api/auth/test-login', {
+    data: {
+      email: process.env.TEST_USER_EMAIL || 'test@example.com'
+    }
+  });
+
+  expect(response.ok()).toBeTruthy();
+  const { token } = await response.json();
+
+  // Set the auth token in cookies
+  await context.addCookies([
+    {
+      name: 'auth-token',
+      value: token,
+      domain: 'localhost',
+      path: '/',
+      httpOnly: true,
+      sameSite: 'Lax'
+    }
+  ]);
+  */
+
+  // Save storage state for reuse in other tests
+  await context.storageState({ path: STORAGE_STATE_PATH });
+
+  console.log('Authentication setup complete');
+});
+
+/**
+ * Setup for testing unauthenticated flows
+ *
+ * Creates a clean state with no authentication
+ */
+setup('setup unauthenticated state', async ({ context }) => {
+  console.log('Setting up unauthenticated state...');
+
+  // Clear any existing authentication
+  await context.clearCookies();
+
+  const unauthStoragePath = path.join(__dirname, '../.auth/unauth.json');
+  const authDir = path.dirname(unauthStoragePath);
+
+  if (!fs.existsSync(authDir)) {
+    fs.mkdirSync(authDir, { recursive: true });
+  }
+
+  // Save clean state
+  await context.storageState({ path: unauthStoragePath });
+
+  console.log('Unauthenticated state setup complete');
+});
+
+/**
+ * Setup for testing with different subscription states
+ *
+ * This creates mock contexts for different user scenarios:
+ * - New user (no subscription)
+ * - Subscribed user (VM provisioning)
+ * - Active user (VM ready)
+ */
+setup('setup subscription states', async ({ page, context }) => {
+  console.log('Setting up subscription state mocks...');
+
+  const statesDir = path.join(__dirname, '../.auth');
+  if (!fs.existsSync(statesDir)) {
+    fs.mkdirSync(statesDir, { recursive: true });
+  }
+
+  // Mock scenarios for different test cases
+  const scenarios = [
+    {
+      name: 'no-subscription',
+      data: {
+        hasAccess: false,
+        vmStatus: null
+      }
+    },
+    {
+      name: 'vm-provisioning',
+      data: {
+        hasAccess: true,
+        vmStatus: 'provisioning',
+        vmSubdomain: 'test-vm'
+      }
+    },
+    {
+      name: 'vm-ready',
+      data: {
+        hasAccess: true,
+        vmStatus: 'ready',
+        vmSubdomain: 'test-vm',
+        maskedApiKey: 'alf_xxxxxxxxxxxx'
+      }
+    },
+    {
+      name: 'vm-error',
+      data: {
+        hasAccess: true,
+        vmStatus: 'error',
+        vmSubdomain: null
+      }
+    }
+  ];
+
+  // Create mock state files for each scenario
+  for (const scenario of scenarios) {
+    const scenarioPath = path.join(statesDir, `${scenario.name}.json`);
+    fs.writeFileSync(
+      scenarioPath,
+      JSON.stringify(scenario.data, null, 2)
+    );
+  }
+
+  console.log('Subscription state mocks created');
+});
+
+/**
+ * Teardown: Clean up authentication artifacts
+ */
+setup.afterAll(async () => {
+  console.log('Cleaning up authentication setup...');
+
+  // Optional: Clean up .auth directory after all tests
+  // Uncomment if you want to clean up after test runs
+  /*
+  const authDir = path.join(__dirname, '../.auth');
+  if (fs.existsSync(authDir)) {
+    fs.rmSync(authDir, { recursive: true, force: true });
+    console.log('Authentication artifacts cleaned up');
+  }
+  */
+});
+
+/**
+ * Helper Functions
+ */
+
+/**
+ * Mock API endpoint with specific response
+ * @param {import('@playwright/test').Page} page
+ * @param {string} endpoint - API endpoint to mock
+ * @param {any} responseData - Data to return
+ * @param {number} statusCode - HTTP status code
+ */
+async function mockApiEndpoint(page, endpoint, responseData, statusCode = 200) {
+  await page.route(endpoint, async (route) => {
+    await route.fulfill({
+      status: statusCode,
+      contentType: 'application/json',
+      body: JSON.stringify(responseData)
+    });
+  });
+}
+
+/**
+ * Load specific test scenario state
+ * @param {import('@playwright/test').Page} page
+ * @param {string} scenarioName - Name of scenario (e.g., 'vm-ready')
+ */
+async function loadScenarioState(page, scenarioName) {
+  const scenarioPath = path.join(__dirname, '../.auth', `${scenarioName}.json`);
+
+  if (!fs.existsSync(scenarioPath)) {
+    throw new Error(`Scenario state not found: ${scenarioName}`);
+  }
+
+  const scenarioData = JSON.parse(fs.readFileSync(scenarioPath, 'utf-8'));
+
+  // Mock the /api/user/status endpoint with scenario data
+  await mockApiEndpoint(page, '**/api/user/status', scenarioData);
+
+  return scenarioData;
+}
+
+/**
+ * Setup authenticated context with specific user data
+ * @param {import('@playwright/test').BrowserContext} context
+ * @param {Object} userData - User data to inject
+ */
+async function setupAuthContext(context, userData = {}) {
+  const defaultUser = {
+    id: 'test-user-id',
+    email: 'test@example.com',
+    name: 'Test User',
+    image: null,
+    ...userData
+  };
+
+  // Inject session data
+  await context.addInitScript((user) => {
+    window.__mockUser = user;
+    window.__mockSession = {
+      user,
+      expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+    };
+  }, defaultUser);
+}
+
+// Export helpers
+module.exports = {
+  mockApiEndpoint,
+  loadScenarioState,
+  setupAuthContext,
+  STORAGE_STATE_PATH
+};
