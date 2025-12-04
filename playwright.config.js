@@ -4,6 +4,8 @@ const { defineConfig, devices } = require('@playwright/test');
 /**
  * Alfred E2E Test Configuration
  * Tests the full onboarding flow as specified in spec.md
+ *
+ * Test user: test@alfred.rocks (has full access, ready VM)
  */
 module.exports = defineConfig({
   testDir: './e2e',
@@ -17,10 +19,10 @@ module.exports = defineConfig({
   // Retry on CI only
   retries: process.env.CI ? 2 : 0,
 
-  // Opt out of parallel tests on CI
+  // Workers
   workers: process.env.CI ? 1 : undefined,
 
-  // Reporter to use
+  // Reporter
   reporter: [
     ['html', { open: 'never' }],
     ['list']
@@ -43,26 +45,52 @@ module.exports = defineConfig({
 
   // Configure projects for different scenarios
   projects: [
-    // Setup project for authentication
+    // ========================================
+    // SETUP PROJECTS
+    // ========================================
+
+    // Auth setup - runs once before authenticated tests
     {
       name: 'setup',
-      testMatch: /.*\.setup\.js/,
+      testMatch: /auth\.setup\.js/,
     },
 
-    // Main test suite
+    // ========================================
+    // UNAUTHENTICATED TEST PROJECTS
+    // These tests don't require auth
+    // ========================================
+
+    // Public pages and auth flow tests
     {
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
       },
-      dependencies: ['setup'],
+      testIgnore: /authenticated\.spec\.js/,
     },
 
-    // Mobile viewport tests
+    // Mobile viewport tests (unauthenticated)
     {
       name: 'mobile',
       use: {
         ...devices['iPhone 14'],
+      },
+      testIgnore: [/authenticated\.spec\.js/, /dashboard.*\.spec\.js/],
+    },
+
+    // ========================================
+    // AUTHENTICATED TEST PROJECTS
+    // These tests run after auth setup
+    // ========================================
+
+    // Authenticated tests (dashboard, user flows)
+    {
+      name: 'authenticated',
+      testMatch: /authenticated\.spec\.js/,
+      use: {
+        ...devices['Desktop Chrome'],
+        // Use stored auth state
+        storageState: 'e2e/.auth/user.json',
       },
       dependencies: ['setup'],
     },
@@ -75,4 +103,7 @@ module.exports = defineConfig({
   expect: {
     timeout: 10000,
   },
+
+  // Output directory
+  outputDir: 'test-results',
 });

@@ -12,15 +12,23 @@ async function getUserVmUrl(userId) {
     throw new Error("User not found");
   }
 
-  // TODO: In Phase 2, this will come from user.vm_subdomain
-  // Example: return `https://${user.vm_subdomain}.alfredos.site`;
-
-  const vmUrl = process.env.USER_VM_URL;
-  if (!vmUrl) {
+  // Check if user has a provisioned VM
+  if (!user.vmSubdomain) {
     throw new Error("VM not provisioned yet. Please complete setup first.");
   }
 
-  return vmUrl;
+  // Check VM status - allow 'ready' or 'provisioning' states
+  if (user.vmStatus === 'pending') {
+    throw new Error("VM provisioning has not started. Please complete setup first.");
+  }
+
+  if (user.vmStatus === 'error') {
+    throw new Error("VM provisioning failed. Please contact support.");
+  }
+
+  // Construct VM URL from subdomain
+  const vmDomain = process.env.VM_BASE_DOMAIN || 'alfredos.site';
+  return `https://${user.vmSubdomain}.${vmDomain}`;
 }
 
 // GET: List executions from user's VM with pagination and filtering

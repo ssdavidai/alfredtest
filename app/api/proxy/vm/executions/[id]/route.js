@@ -47,7 +47,8 @@ export async function GET(req, { params }) {
     }
 
     // Construct VM API URL
-    const vmUrl = `https://${user.vmSubdomain}/api/executions/${id}`;
+    const vmDomain = process.env.VM_BASE_DOMAIN || 'alfredos.site';
+    const vmUrl = `https://${user.vmSubdomain}.${vmDomain}/api/executions/${id}`;
 
     // Forward request to user's VM with authentication
     const vmResponse = await fetch(vmUrl, {
