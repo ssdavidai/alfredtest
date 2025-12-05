@@ -173,9 +173,14 @@ write_files:
           reverse_proxy nocodb:8080
         }
 
-        # Default to async-agent
+        # Default to async-agent (with extended timeout for sync mode)
         handle {
-          reverse_proxy async-agent:3000
+          reverse_proxy async-agent:3000 {
+            transport http {
+              dial_timeout 10s
+              response_header_timeout 360s
+            }
+          }
         }
 
         # Enable compression
