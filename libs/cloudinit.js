@@ -219,8 +219,8 @@ write_files:
       CREDS_KEY=$(openssl rand -base64 32)
       CREDS_IV=$(openssl rand -base64 16)
 
-      # Read existing VM_AUTH_SECRET from .env
-      VM_AUTH_SECRET=$(grep VM_AUTH_SECRET /opt/alfred/.env | cut -d= -f2)
+      # Read existing VM_AUTH_SECRET from .env (use -f2- to preserve = chars in base64)
+      VM_AUTH_SECRET=$(grep VM_AUTH_SECRET /opt/alfred/.env | cut -d= -f2-)
 
       # Rewrite .env with real secrets
       cat > /opt/alfred/.env << ENVFILE
