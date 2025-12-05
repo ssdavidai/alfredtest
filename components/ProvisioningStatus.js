@@ -19,6 +19,8 @@ export default function ProvisioningStatus({ initialStatus }) {
           setProgress((prev) => Math.min(prev + 10, 90));
         } else if (data.vmStatus === "ready") {
           setProgress(100);
+          // Reload to show the ready dashboard
+          window.location.reload();
         }
       } catch (err) {
         console.error("Failed to fetch status:", err);
