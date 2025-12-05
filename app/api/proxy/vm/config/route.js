@@ -41,6 +41,7 @@ export async function GET() {
 
   try {
     const vmUrl = await getUserVmUrl(session.user.id);
+    console.log(`[Proxy] Fetching config from VM: ${vmUrl}/api/config`);
 
     // Proxy the request to the user's VM
     const response = await fetch(`${vmUrl}/api/config`, {
@@ -52,9 +53,11 @@ export async function GET() {
       },
     });
 
+    console.log(`[Proxy] VM response status: ${response.status}`);
+
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("VM API error:", errorText);
+      console.error("[Proxy] VM API error:", errorText);
       return NextResponse.json(
         { error: "Failed to fetch config from VM" },
         { status: response.status }
@@ -62,9 +65,10 @@ export async function GET() {
     }
 
     const config = await response.json();
+    console.log(`[Proxy] VM config response:`, JSON.stringify(config));
     return NextResponse.json(config);
   } catch (e) {
-    console.error("Error fetching config:", e);
+    console.error("[Proxy] Error fetching config:", e);
     return NextResponse.json(
       { error: e?.message || "Internal server error" },
       { status: 500 }

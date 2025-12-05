@@ -37,7 +37,7 @@ export default function Dashboard() {
           setConfigStatus(config);
 
           // Auto-open modal if API key is not set
-          if (!config.has_anthropic_key) {
+          if (!config.hasApiKey) {
             setIsModalOpen(true);
           }
         } catch (error) {
@@ -164,7 +164,7 @@ export default function Dashboard() {
             <div className="card-body">
               <h2 className="card-title">Anthropic API Configuration</h2>
 
-              {configStatus?.has_anthropic_key ? (
+              {configStatus?.hasApiKey ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-success">
                     <svg
@@ -181,10 +181,10 @@ export default function Dashboard() {
                     </svg>
                     <span className="font-medium">API key configured</span>
                   </div>
-                  {configStatus.anthropic_key_masked && (
+                  {configStatus.maskedApiKey && (
                     <div className="text-sm">
                       <span className="text-base-content/70">Current key: </span>
-                      <span className="font-mono">{configStatus.anthropic_key_masked}</span>
+                      <span className="font-mono">{configStatus.maskedApiKey}</span>
                     </div>
                   )}
                   <button
@@ -248,7 +248,7 @@ export default function Dashboard() {
       <AnthropicKeyModal
         isOpen={isModalOpen}
         setIsOpen={setIsModalOpen}
-        existingKeyMasked={configStatus?.anthropic_key_masked}
+        existingKeyMasked={configStatus?.maskedApiKey}
         onSaveSuccess={handleSaveSuccess}
       />
     </main>
